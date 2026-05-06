@@ -3,25 +3,39 @@ export default function Hero() {
     <section
       className="d-flex align-items-center text-white"
       style={{
-        height: "90vh",
-        paddingTop: "80px",
+        minHeight: "95vh",
+        paddingTop: "90px",
         backgroundImage:
-          "linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)), url('https://images.unsplash.com/photo-1505693416388-ac5ce068fe85')",
+          "linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.35)), url('https://images.unsplash.com/photo-1600210492486-724fe5c67fb0')",
         backgroundSize: "cover",
         backgroundPosition: "center",
       }}
     >
       <div className="container">
-        <h1 className="display-2 fw-bold">Eleos Decor</h1>
+        <div className="col-lg-7">
+          <p className="text-uppercase fw-semibold mb-3" style={{ letterSpacing: "3px" }}>
+            Warm Luxury For Every Space
+          </p>
 
-        <p className="lead col-md-6 mt-4">
-          Luxury interior decorations crafted to transform your space into
-          elegance and comfort.
-        </p>
+          <h1 className="display-2 fw-bold mb-4">
+            Transform Your Home & Office With Elegant Decor
+          </h1>
 
-        <a href="/shop" className="btn btn-light btn-lg mt-3">
-          Shop Collection
-        </a>
+          <p className="lead mb-4">
+            Quality and affordable interior decoration pieces carefully selected
+            to make your space feel warm, stylish, and welcoming.
+          </p>
+
+          <div className="d-flex flex-wrap gap-3 pb-4">
+            <a href="/shop" className="btn btn-light btn-lg">
+              Shop Collection
+            </a>
+
+            <a href="/contact" className="btn btn-outline-light btn-lg">
+              Talk to Us
+            </a>
+          </div>
+        </div>
       </div>
     </section>
   );

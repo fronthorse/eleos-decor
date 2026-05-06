@@ -1,5 +1,8 @@
+import Link from "next/link";
+
 import Navbar from "../.././components/Navbar";
 import Footer from "../.././components/Footer";
+import ProductCard from "../.././components/ProductCard";
 import products from "../.././data/products";
 
 export default async function ProductDetails({ params }) {
@@ -13,23 +16,37 @@ export default async function ProductDetails({ params }) {
     return (
       <>
         <Navbar />
-        <div className="container py-5" style={{ marginTop: "80px" }}>
+        <div className="container py-5" style={{ marginTop: "100px" }}>
           <h1>Product not found</h1>
-          <p>No product matches this ID: {id}</p>
+          <Link href="/shop" className="btn btn-dark mt-3">
+            Back to Shop
+          </Link>
         </div>
         <Footer />
       </>
     );
   }
 
-  const whatsappMessage = `Hello Eleos Decor, I want to order ${product.title}`;
+  const similarProducts = products.filter(
+    (item) =>
+      item.category === product.category &&
+      item.id !== product.id
+  );
+
+  const whatsappMessage = `Hello Eleos Decor, I want to order ${product.title}. Price: ₦${product.price}`;
 
   return (
     <>
       <Navbar />
 
-      <section className="py-5" style={{ marginTop: "80px" }}>
+      <section className="py-5" style={{ marginTop: "100px" }}>
         <div className="container">
+          <div className="mb-4">
+            <Link href="/shop" className="text-muted text-decoration-none">
+              ← Back to Shop
+            </Link>
+          </div>
+
           <div className="row align-items-center g-5">
             <div className="col-md-6">
               <img
@@ -38,17 +55,32 @@ export default async function ProductDetails({ params }) {
                 className="img-fluid rounded shadow"
                 style={{
                   width: "100%",
-                  height: "500px",
+                  height: "520px",
                   objectFit: "cover",
                 }}
               />
             </div>
 
             <div className="col-md-6">
-              <p className="text-muted">{product.category}</p>
+              <span className="badge bg-dark mb-3 px-3 py-2">
+                {product.category}
+              </span>
+
               <h1 className="fw-bold mb-4">{product.title}</h1>
-              <h3 className="mb-4">₦{product.price}</h3>
-              <p className="lead text-muted">{product.description}</p>
+
+              <h2 className="mb-4">₦{product.price}</h2>
+
+              <p className="lead text-muted mb-4">
+                {product.description}
+              </p>
+
+              <div className="p-4 rounded bg-light mb-4">
+                <h6 className="fw-bold">Why you’ll love it</h6>
+                <p className="text-muted mb-0">
+                  A beautiful décor piece selected to add warmth,
+                  elegance, and character to your living space.
+                </p>
+              </div>
 
               <a
                 href={`https://wa.me/2348168350533?text=${encodeURIComponent(
@@ -56,7 +88,7 @@ export default async function ProductDetails({ params }) {
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn btn-dark btn-lg mt-4"
+                className="btn btn-dark btn-lg w-100"
               >
                 Order on WhatsApp
               </a>
@@ -64,6 +96,20 @@ export default async function ProductDetails({ params }) {
           </div>
         </div>
       </section>
+
+      {similarProducts.length > 0 && (
+        <section className="py-5">
+          <div className="container">
+            <h3 className="fw-bold mb-4">Similar Products</h3>
+
+            <div className="row g-4">
+              {similarProducts.map((item) => (
+                <ProductCard key={item.id} {...item} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       <Footer />
     </>

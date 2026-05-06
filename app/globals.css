@@ -47,3 +47,73 @@ a {
     color-scheme: dark;
   }
 }
+body {
+  background-color: #faf7f2;
+  color: #1f1f1f;
+}
+
+.card {
+  transition: all 0.3s ease;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 18px 35px rgba(0, 0, 0, 0.12) !important;
+}
+
+.card img {
+  transition: transform 0.4s ease;
+}
+
+.card:hover img {
+  transform: scale(1.04);
+}
+
+.btn-dark {
+  background-color: #1f1f1f;
+  border: none;
+  border-radius: 30px;
+  padding: 12px 22px;
+}
+
+.btn-dark:hover {
+  background-color: #b8955f;
+}
+
+.btn-light {
+  border-radius: 30px;
+  padding: 12px 26px;
+}
+
+.navbar-brand {
+  letter-spacing: 1px;
+}
+
+section {
+  scroll-margin-top: 90px;
+}
+.nav-link {
+  position: relative;
+  transition: color 0.3s ease;
+}
+
+.nav-link:hover {
+  color: #b8955f !important;
+}
+
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  width: 0%;
+  height: 2px;
+  background-color: #b8955f;
+  transition: width 0.3s ease;
+}
+
+.nav-link:hover::after {
+  width: 100%;
+}
