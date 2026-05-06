@@ -2,26 +2,34 @@ import Link from "next/link";
 
 const categories = [
   {
-    title: "Wall Frames",
+    title: "Frames",
     image: "https://images.unsplash.com/photo-1513519245088-0e12902e5a38",
   },
   {
-    title: "Faux Flowers",
-    image: "https://images.unsplash.com/photo-1525310072745-f49212b5ac6d",
-  },
-  {
-    title: "Artificial Plants",
+    title: "Plants",
     image: "https://images.unsplash.com/photo-1485955900006-10f4d324d411",
   },
   {
-    title: "Decor Lights",
-    image: "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15",
+    title: "Mirrors",
+    image: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6",
+  },
+  {
+    title: "Flowers",
+    image: "https://images.unsplash.com/photo-1525310072745-f49212b5ac6d",
+  },
+  {
+    title: "Rugs",
+    image: "https://images.unsplash.com/photo-1600166898405-da9535204843",
+  },
+  {
+    title: "Scented Candles",
+    image: "https://images.unsplash.com/photo-1603006905003-be475563bc59",
   },
 ];
 
 export default function CategoryShowcase() {
   return (
-    <section className="py-5">
+    <section className="py-5 bg-white">
       <div className="container">
         <div className="text-center mb-5">
           <h2 className="fw-bold">Shop By Category</h2>
@@ -32,15 +40,18 @@ export default function CategoryShowcase() {
 
         <div className="row g-4">
           {categories.map((category) => (
-            <div className="col-md-3" key={category.title}>
-              <Link href="/shop" style={{ textDecoration: "none" }}>
-                <div className="category-card position-relative rounded overflow-hidden shadow-sm">
+            <div className="col-md-4 col-lg-2" key={category.title}>
+              <Link
+                href={`/shop?category=${encodeURIComponent(category.title)}`}
+                style={{ textDecoration: "none" }}
+              >
+                <div className="category-card position-relative rounded overflow-hidden shadow-sm h-100">
                   <img
                     src={category.image}
                     alt={category.title}
                     style={{
                       width: "100%",
-                      height: "280px",
+                      height: "220px",
                       objectFit: "cover",
                     }}
                   />
@@ -52,14 +63,20 @@ export default function CategoryShowcase() {
                         "linear-gradient(transparent, rgba(0,0,0,0.65))",
                     }}
                   >
-                    <h5 className="text-white fw-bold p-3 mb-0">
+                    <h6 className="text-white fw-bold p-3 mb-0">
                       {category.title}
-                    </h5>
+                    </h6>
                   </div>
                 </div>
               </Link>
             </div>
           ))}
+        </div>
+
+        <div className="text-center mt-5">
+          <Link href="/shop" className="btn btn-dark">
+            View All Categories
+          </Link>
         </div>
       </div>
     </section>

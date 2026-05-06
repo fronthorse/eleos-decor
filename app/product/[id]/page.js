@@ -3,16 +3,18 @@ import Link from "next/link";
 import Navbar from "../.././components/Navbar";
 import Footer from "../.././components/Footer";
 import ProductCard from "../.././components/ProductCard";
-import products from "../.././data/products";
+import { supabase } from "../../../lib/supabaseClient";
 
 export default async function ProductDetails({ params }) {
   const { id } = await params;
 
-  const product = products.find(
-    (item) => String(item.id) === String(id)
-  );
+  const { data: product, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("id", id)
+    .single();
 
-  if (!product) {
+  if (error || !product) {
     return (
       <>
         <Navbar />
@@ -27,11 +29,12 @@ export default async function ProductDetails({ params }) {
     );
   }
 
-  const similarProducts = products.filter(
-    (item) =>
-      item.category === product.category &&
-      item.id !== product.id
-  );
+  const { data: similarProducts } = await supabase
+    .from("products")
+    .select("*")
+    .eq("category", product.category)
+    .neq("id", product.id)
+    .limit(3);
 
   const whatsappMessage = `Hello Eleos Decor, I want to order ${product.title}. Price: ₦${product.price}`;
 
@@ -50,7 +53,7 @@ export default async function ProductDetails({ params }) {
           <div className="row align-items-center g-5">
             <div className="col-md-6">
               <img
-                src={product.image}
+                src={product.image_url}
                 alt={product.title}
                 className="img-fluid rounded shadow"
                 style={{
@@ -97,14 +100,21 @@ export default async function ProductDetails({ params }) {
         </div>
       </section>
 
-      {similarProducts.length > 0 && (
+      {similarProducts && similarProducts.length > 0 && (
         <section className="py-5">
           <div className="container">
             <h3 className="fw-bold mb-4">Similar Products</h3>
 
             <div className="row g-4">
               {similarProducts.map((item) => (
-                <ProductCard key={item.id} {...item} />
+                <ProductCard
+                  key={item.id}
+                  id={item.id}
+                  image={item.image_url}
+                  title={item.title}
+                  description={item.description}
+                  price={item.price}
+                />
               ))}
             </div>
           </div>
