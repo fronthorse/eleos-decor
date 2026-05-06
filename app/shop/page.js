@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import Navbar from ".././components/Navbar";
@@ -8,9 +8,10 @@ import Footer from ".././components/Footer";
 import ProductCard from ".././components/ProductCard";
 import { supabase } from "../../lib/supabaseClient";
 
-export default function ShopPage() {
+function ShopContent() {
   const searchParams = useSearchParams();
-const categoryFromUrl = searchParams.get("category");
+  const categoryFromUrl = searchParams.get("category");
+
   const [products, setProducts] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [loading, setLoading] = useState(true);
@@ -37,11 +38,12 @@ const categoryFromUrl = searchParams.get("category");
   useEffect(() => {
     fetchProducts();
   }, []);
+
   useEffect(() => {
-  if (categoryFromUrl) {
-    setSelectedCategory(categoryFromUrl);
-  }
-}, [categoryFromUrl]);
+    if (categoryFromUrl) {
+      setSelectedCategory(categoryFromUrl);
+    }
+  }, [categoryFromUrl]);
 
   async function fetchProducts() {
     const { data, error } = await supabase
@@ -83,7 +85,9 @@ const categoryFromUrl = searchParams.get("category");
                 key={category}
                 onClick={() => setSelectedCategory(category)}
                 className={`btn ${
-                  selectedCategory === category ? "btn-dark" : "btn-outline-dark"
+                  selectedCategory === category
+                    ? "btn-dark"
+                    : "btn-outline-dark"
                 }`}
               >
                 {category}
@@ -123,5 +127,13 @@ const categoryFromUrl = searchParams.get("category");
 
       <Footer />
     </>
+  );
+}
+
+export default function ShopPage() {
+  return (
+    <Suspense fallback={<p className="text-center py-5">Loading shop...</p>}>
+      <ShopContent />
+    </Suspense>
   );
 }
