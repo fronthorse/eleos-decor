@@ -14,6 +14,8 @@ function ShopContent() {
 
   const [products, setProducts] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortOption, setSortOption] = useState("newest");
   const [loading, setLoading] = useState(true);
 
   const categories = [
@@ -57,14 +59,45 @@ function ShopContent() {
       return;
     }
 
-    setProducts(data);
+    setProducts(data || []);
     setLoading(false);
   }
 
-  const filteredProducts =
-    selectedCategory === "All"
-      ? products
-      : products.filter((product) => product.category === selectedCategory);
+  function getNumericPrice(price) {
+    return Number(String(price).replace(/,/g, ""));
+  }
+
+  const filteredProducts = products
+    .filter((product) => {
+      const matchesCategory =
+        selectedCategory === "All" || product.category === selectedCategory;
+
+      const matchesSearch =
+        product.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.category.toLowerCase().includes(searchTerm.toLowerCase());
+
+      return matchesCategory && matchesSearch;
+    })
+    .sort((a, b) => {
+      if (sortOption === "newest") {
+        return new Date(b.created_at) - new Date(a.created_at);
+      }
+
+      if (sortOption === "oldest") {
+        return new Date(a.created_at) - new Date(b.created_at);
+      }
+
+      if (sortOption === "price-low") {
+        return getNumericPrice(a.price) - getNumericPrice(b.price);
+      }
+
+      if (sortOption === "price-high") {
+        return getNumericPrice(b.price) - getNumericPrice(a.price);
+      }
+
+      return 0;
+    });
 
   return (
     <>
@@ -77,6 +110,31 @@ function ShopContent() {
             <p className="text-muted">
               Explore elegant décor pieces for beautiful living spaces.
             </p>
+          </div>
+
+          <div className="row g-3 align-items-center mb-4">
+            <div className="col-md-8">
+              <input
+                type="text"
+                className="form-control form-control-lg"
+                placeholder="Search products, categories, or descriptions..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+
+            <div className="col-md-4">
+              <select
+                className="form-select form-select-lg"
+                value={sortOption}
+                onChange={(e) => setSortOption(e.target.value)}
+              >
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="price-low">Price: Low to High</option>
+                <option value="price-high">Price: High to Low</option>
+              </select>
+            </div>
           </div>
 
           <div className="d-flex flex-wrap justify-content-center gap-3 mb-5">
@@ -95,6 +153,13 @@ function ShopContent() {
             ))}
           </div>
 
+          {!loading && (
+            <p className="text-muted mb-4">
+              Showing {filteredProducts.length} product
+              {filteredProducts.length === 1 ? "" : "s"}
+            </p>
+          )}
+
           {loading && (
             <div className="text-center py-5">
               <p className="text-muted">Loading products...</p>
@@ -105,7 +170,7 @@ function ShopContent() {
             <div className="text-center py-5">
               <h4>No products found</h4>
               <p className="text-muted">
-                Products in this category will appear here once uploaded.
+                Try another search term or category.
               </p>
             </div>
           )}
