@@ -126,27 +126,46 @@ export default function AdminPage() {
     setMessage("");
   }
 
-  async function handleDeleteProduct(id) {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this product?"
-    );
+  async function handleDeleteProduct(product) {
+  const confirmed = window.confirm(
+    "Are you sure you want to delete this product?"
+  );
 
-    if (!confirmed) return;
+  if (!confirmed) return;
 
-    const { error } = await supabase
+  const imagesToDelete =
+    product.gallery_images && product.gallery_images.length > 0
+      ? product.gallery_images
+      : [product.image_url];
+
+  const filePaths = imagesToDelete
+    .map((url) => url.split("/products/")[1])
+    .filter(Boolean);
+
+  if (filePaths.length > 0) {
+    const { error: storageError } = await supabase.storage
       .from("products")
-      .delete()
-      .eq("id", id);
+      .remove(filePaths);
 
-    if (error) {
-      setMessage(error.message);
+    if (storageError) {
+      setMessage(storageError.message);
       return;
     }
-
-    setMessage("Product deleted successfully.");
-    fetchProducts();
   }
 
+  const { error } = await supabase
+    .from("products")
+    .delete()
+    .eq("id", product.id);
+
+  if (error) {
+    setMessage(error.message);
+    return;
+  }
+
+  setMessage("Product and images deleted successfully.");
+  fetchProducts();
+}
   async function handleUploadProduct(e) {
     e.preventDefault();
 
@@ -435,7 +454,7 @@ export default function AdminPage() {
                     </button>
 
                     <button
-                      onClick={() => handleDeleteProduct(product.id)}
+                     onClick={() => handleDeleteProduct(product)}
                       className="btn btn-danger w-50"
                     >
                       Delete

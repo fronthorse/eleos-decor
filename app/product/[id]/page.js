@@ -5,6 +5,7 @@ import Footer from "../.././components/Footer";
 import ProductCard from "../.././components/ProductCard";
 import { supabase } from "../../../lib/supabaseClient";
 import ProductGallery from "../.././components/ProductGallery";
+import WhatsAppOrderBox from "../.././components/WhatsAppOrderBox";
 
 export default async function ProductDetails({ params }) {
   const { id } = await params;
@@ -37,8 +38,6 @@ export default async function ProductDetails({ params }) {
     .neq("id", product.id)
     .limit(3);
 
-  const whatsappMessage = `Hello Eleos Decor, I want to order ${product.title}. Price: ₦${product.price}`;
-
   return (
     <>
       <Navbar />
@@ -53,12 +52,12 @@ export default async function ProductDetails({ params }) {
 
           <div className="row align-items-center g-5">
             <div className="col-md-6">
-  <ProductGallery
-    mainImage={product.image_url}
-    galleryImages={product.gallery_images}
-    title={product.title}
-  />
-</div>
+              <ProductGallery
+                mainImage={product.image_url}
+                galleryImages={product.gallery_images}
+                title={product.title}
+              />
+            </div>
 
             <div className="col-md-6">
               <span className="badge bg-dark mb-3 px-3 py-2">
@@ -69,28 +68,17 @@ export default async function ProductDetails({ params }) {
 
               <h2 className="mb-4">₦{product.price}</h2>
 
-              <p className="lead text-muted mb-4">
-                {product.description}
-              </p>
+              <p className="lead text-muted mb-4">{product.description}</p>
 
               <div className="p-4 rounded bg-light mb-4">
                 <h6 className="fw-bold">Why you’ll love it</h6>
                 <p className="text-muted mb-0">
-                  A beautiful décor piece selected to add warmth,
-                  elegance, and character to your living space.
+                  A beautiful décor piece selected to add warmth, elegance, and
+                  character to your living space.
                 </p>
               </div>
 
-              <a
-                href={`https://wa.me/2348168350533?text=${encodeURIComponent(
-                  whatsappMessage
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-dark btn-lg w-100"
-              >
-                Order on WhatsApp
-              </a>
+              <WhatsAppOrderBox product={product} />
             </div>
           </div>
         </div>
