@@ -10,62 +10,56 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="navbar navbar-expand-lg bg-white shadow-sm fixed-top py-3 luxury-navbar">
+      <nav className="navbar navbar-expand-lg bg-white fixed-top minimal-navbar">
         <div className="container">
-          <a className="navbar-brand fw-bold fs-3" href="/">
+          <a className="navbar-brand fw-bold" href="/">
             Eleos Decor
           </a>
 
-          <button
-            className="navbar-toggler"
-            type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#navbarNav"
-          >
-            <span className="navbar-toggler-icon"></span>
-          </button>
+          <div className="d-flex align-items-center gap-2 order-lg-2">
+            <button
+              onClick={() => setCartOpen(true)}
+              className="btn btn-sm btn-outline-dark cart-nav-btn"
+            >
+              Cart ({cartCount})
+            </button>
 
-          <div className="collapse navbar-collapse" id="navbarNav">
-            <ul className="navbar-nav ms-auto align-items-lg-center gap-lg-3">
+            <button
+              className="navbar-toggler"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#navbarNav"
+              aria-controls="navbarNav"
+              aria-expanded="false"
+              aria-label="Toggle navigation"
+            >
+              <span className="navbar-toggler-icon"></span>
+            </button>
+          </div>
+
+          <div className="collapse navbar-collapse order-lg-1" id="navbarNav">
+            <ul className="navbar-nav ms-lg-auto align-items-lg-center gap-lg-3 mt-3 mt-lg-0">
               <li className="nav-item">
-                <a className="nav-link fw-medium" href="/">Home</a>
+                <a className="nav-link" href="/">Home</a>
               </li>
 
               <li className="nav-item">
-                <a className="nav-link fw-medium" href="/shop">Shop</a>
+                <a className="nav-link" href="/shop">Shop</a>
               </li>
 
               <li className="nav-item">
-                <a className="nav-link fw-medium" href="/about">About</a>
+                <a className="nav-link" href="/about">About</a>
               </li>
 
               <li className="nav-item">
-                <a className="nav-link fw-medium" href="/contact">Contact</a>
-              </li>
-
-              <li className="nav-item">
-                <button
-                  onClick={() => setCartOpen(true)}
-                  className="btn btn-outline-dark px-4"
-                >
-                  Cart ({cartCount})
-                </button>
-              </li>
-
-              <li className="nav-item">
-                <a className="btn btn-dark px-4" href="/shop">
-                  Shop Now
-                </a>
+                <a className="nav-link" href="/contact">Contact</a>
               </li>
             </ul>
           </div>
         </div>
       </nav>
 
-      <MiniCartDrawer
-        isOpen={cartOpen}
-        onClose={() => setCartOpen(false)}
-      />
+      <MiniCartDrawer isOpen={cartOpen} onClose={() => setCartOpen(false)} />
     </>
   );
 }

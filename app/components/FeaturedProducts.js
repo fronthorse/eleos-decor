@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import ProductCard from "./ProductCard";
 import { supabase } from "../../lib/supabaseClient";
+import ProductSkeleton from ".././components/ProductSkeleton";
 
 export default function FeaturedProducts() {
   const [featuredProducts, setFeaturedProducts] = useState([]);
@@ -35,8 +36,12 @@ export default function FeaturedProducts() {
         <h2 className="text-center fw-bold mb-5">Featured Products</h2>
 
         {loading && (
-          <p className="text-center text-muted">Loading featured products...</p>
-        )}
+  <div className="row g-4">
+    {[1, 2, 3].map((item) => (
+      <ProductSkeleton key={item} />
+    ))}
+  </div>
+)}
 
         {!loading && featuredProducts.length === 0 && (
           <p className="text-center text-muted">

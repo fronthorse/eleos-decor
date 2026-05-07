@@ -7,6 +7,7 @@ import Navbar from ".././components/Navbar";
 import Footer from ".././components/Footer";
 import ProductCard from ".././components/ProductCard";
 import { supabase } from "../../lib/supabaseClient";
+import ProductSkeleton from ".././components/ProductSkeleton";
 
 function ShopContent() {
   const searchParams = useSearchParams();
@@ -161,10 +162,12 @@ function ShopContent() {
           )}
 
           {loading && (
-            <div className="text-center py-5">
-              <p className="text-muted">Loading products...</p>
-            </div>
-          )}
+  <div className="row g-4">
+    {[1, 2, 3, 4, 5, 6].map((item) => (
+      <ProductSkeleton key={item} />
+    ))}
+  </div>
+)}
 
           {!loading && filteredProducts.length === 0 && (
             <div className="text-center py-5">
