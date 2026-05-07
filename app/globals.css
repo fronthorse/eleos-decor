@@ -353,3 +353,27 @@ body {
 .mini-cart-drawer.open {
   right: 0 !important;
 }
+.review-stars {
+  color: #b8955f;
+  font-size: 1.1rem;
+  letter-spacing: 2px;
+}
+
+.review-card {
+  border-radius: 24px;
+  padding: 28px;
+  background: white;
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.06);
+  transition: all 0.35s ease;
+}
+
+.review-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.1);
+}
+
+.review-form-box {
+  border-radius: 28px;
+  background: white;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.08);
+}

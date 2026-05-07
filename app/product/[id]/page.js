@@ -6,6 +6,7 @@ import ProductCard from "../.././components/ProductCard";
 import { supabase } from "../../../lib/supabaseClient";
 import ProductGallery from "../.././components/ProductGallery";
 import WhatsAppOrderBox from "../.././components/WhatsAppOrderBox";
+import ProductReviews from "../.././components/ProductReviews";
 
 export default async function ProductDetails({ params }) {
   const { id } = await params;
@@ -103,7 +104,7 @@ export default async function ProductDetails({ params }) {
           </div>
         </section>
       )}
-
+      <ProductReviews productId={product.id} />
       <Footer />
     </>
   );
