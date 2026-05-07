@@ -1,4 +1,7 @@
+"use client";
+import { useCart } from "../../context/CartContext";
 export default function Navbar() {
+  const { cartCount } = useCart();
   return (
     <nav className="navbar navbar-expand-lg bg-white shadow-sm fixed-top py-3 luxury-navbar">
       <div className="container">
@@ -32,7 +35,11 @@ export default function Navbar() {
             <li className="nav-item">
               <a className="nav-link fw-medium" href="/contact">Contact</a>
             </li>
-
+<li className="nav-item">
+  <a className="nav-link fw-medium" href="/cart">
+    Cart ({cartCount})
+  </a>
+</li>
             <li className="nav-item">
               <a className="btn btn-dark px-4" href="/shop">
                 Shop Now

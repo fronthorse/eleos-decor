@@ -1,3 +1,6 @@
+"use client";
+
+import { useCart } from "../../context/CartContext";
 import Link from "next/link";
 
 export default function ProductCard({
@@ -8,6 +11,7 @@ export default function ProductCard({
   price,
 }) {
   const whatsappMessage = `Hello Eleos Decor, I want to order ${title}`;
+  const { addToCart } = useCart();
 
   return (
     <div className="col-md-4">
@@ -47,16 +51,30 @@ export default function ProductCard({
             </span>
           </div>
 
-          <a
-            href={`https://wa.me/2348168350533?text=${encodeURIComponent(
-              whatsappMessage
-            )}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-dark w-100 py-3"
-          >
-            Order on WhatsApp
-          </a>
+          <button
+  onClick={() =>
+    addToCart({
+      id,
+      title,
+      price,
+      image_url: image,
+    })
+  }
+  className="btn btn-outline-dark w-100 py-3 mb-2"
+>
+  Add to Cart
+</button>
+
+<a
+  href={`https://wa.me/2348168350533?text=${encodeURIComponent(
+    whatsappMessage
+  )}`}
+  target="_blank"
+  rel="noopener noreferrer"
+  className="btn btn-dark w-100 py-3"
+>
+  Order on WhatsApp
+</a>
         </div>
 
       </div>

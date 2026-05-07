@@ -3,6 +3,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import BootstrapClient from "./components/BootstrapClient";
 import "./globals.css";
 import AOSClient from "./components/AOSClient";
+import { CartProvider } from "../context/CartContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -22,11 +23,14 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body>
-        <BootstrapClient />
-        <AOSClient />
-        {children}
-      </body>
+     <body>
+  <BootstrapClient />
+  <AOSClient />
+
+  <CartProvider>
+    {children}
+  </CartProvider>
+</body>
     </html>
   );
 }

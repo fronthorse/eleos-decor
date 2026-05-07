@@ -1,15 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { useCart } from "../../context/CartContext";
 
 export default function WhatsAppOrderBox({ product }) {
   const [quantity, setQuantity] = useState(1);
   const [note, setNote] = useState("");
+  const { addToCart } = useCart();
 
   const whatsappNumber = "2348168350533";
 
   const message = `
 Hello Eleos Decor,
+
 
 I would like to order:
 
@@ -53,7 +56,19 @@ Thank you.
           onChange={(e) => setNote(e.target.value)}
         ></textarea>
       </div>
-
+<button
+  onClick={() =>
+    addToCart({
+      id: product.id,
+      title: product.title,
+      price: product.price,
+      image_url: product.image_url,
+    })
+  }
+  className="btn btn-outline-dark btn-lg w-100 mb-3"
+>
+  Add to Cart
+</button>
       <a
         href={whatsappLink}
         target="_blank"
