@@ -30,7 +30,7 @@ export default function FeaturedProducts() {
   }
 
   return (
-    <section className="py-5">
+    <section className="py-5" data-aos="fade-up">
       <div className="container">
         <h2 className="text-center fw-bold mb-5">Featured Products</h2>
 

@@ -45,7 +45,10 @@ export default function CategoryShowcase() {
                 href={`/shop?category=${encodeURIComponent(category.title)}`}
                 style={{ textDecoration: "none" }}
               >
-                <div className="category-card position-relative rounded overflow-hidden shadow-sm h-100">
+                <div
+                  className="category-card position-relative rounded overflow-hidden shadow-sm h-100"
+                  data-aos="fade-up"
+                >
                   <img
                     src={category.image}
                     alt={category.title}

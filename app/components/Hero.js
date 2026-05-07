@@ -1,27 +1,17 @@
 export default function Hero() {
   return (
-    <section
-      className="d-flex align-items-center text-white"
-      style={{
-        minHeight: "95vh",
-        paddingTop: "90px",
-        backgroundImage:
-          "linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.35)), url('https://images.unsplash.com/photo-1600210492486-724fe5c67fb0')",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
-    >
+    <section className="hero-section d-flex align-items-center text-white">
       <div className="container">
         <div className="col-lg-7">
-          <p className="text-uppercase fw-semibold mb-3" style={{ letterSpacing: "3px" }}>
+          <p className="section-label text-white mb-3">
             Warm Luxury For Every Space
           </p>
 
-          <h1 className="display-2 fw-bold mb-4">
+          <h1 className="hero-title mb-4">
             Transform Your Home & Office With Elegant Decor
           </h1>
 
-          <p className="lead mb-4">
+          <p className="hero-text mb-4">
             Quality and affordable interior decoration pieces carefully selected
             to make your space feel warm, stylish, and welcoming.
           </p>
@@ -34,6 +24,23 @@ export default function Hero() {
             <a href="/contact" className="btn btn-outline-light btn-lg">
               Talk to Us
             </a>
+          </div>
+
+          <div className="d-flex flex-wrap gap-4 mt-4">
+            <div>
+              <h4 className="fw-bold mb-0">Nationwide</h4>
+              <small>Delivery across Nigeria</small>
+            </div>
+
+            <div>
+              <h4 className="fw-bold mb-0">Home & Office</h4>
+              <small>Decor solutions</small>
+            </div>
+
+            <div>
+              <h4 className="fw-bold mb-0">Warm Luxury</h4>
+              <small>Affordable elegance</small>
+            </div>
           </div>
         </div>
       </div>

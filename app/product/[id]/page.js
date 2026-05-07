@@ -37,12 +37,11 @@ export default async function ProductDetails({ params }) {
     .eq("category", product.category)
     .neq("id", product.id)
     .limit(3);
-
   return (
     <>
       <Navbar />
 
-      <section className="py-5" style={{ marginTop: "100px" }}>
+      <section className="luxury-section" style={{ marginTop: "70px" }}>
         <div className="container">
           <div className="mb-4">
             <Link href="/shop" className="text-muted text-decoration-none">
@@ -60,25 +59,25 @@ export default async function ProductDetails({ params }) {
             </div>
 
             <div className="col-md-6">
-              <span className="badge bg-dark mb-3 px-3 py-2">
-                {product.category}
-              </span>
+              <div className="product-detail-box">
+                <span className="product-badge mb-3">{product.category}</span>
 
-              <h1 className="fw-bold mb-4">{product.title}</h1>
+                <h1 className="fw-bold mb-4">{product.title}</h1>
 
-              <h2 className="mb-4">₦{product.price}</h2>
+                <h2 className="mb-4">₦{product.price}</h2>
 
-              <p className="lead text-muted mb-4">{product.description}</p>
+                <p className="lead text-muted mb-4">{product.description}</p>
 
-              <div className="p-4 rounded bg-light mb-4">
-                <h6 className="fw-bold">Why you’ll love it</h6>
-                <p className="text-muted mb-0">
-                  A beautiful décor piece selected to add warmth, elegance, and
-                  character to your living space.
-                </p>
+                <div className="p-4 rounded bg-light mb-4">
+                  <h6 className="fw-bold">Why you’ll love it</h6>
+                  <p className="text-muted mb-0">
+                    A beautiful décor piece selected to add warmth, elegance,
+                    and character to your living space.
+                  </p>
+                </div>
+
+                <WhatsAppOrderBox product={product} />
               </div>
-
-              <WhatsAppOrderBox product={product} />
             </div>
           </div>
         </div>

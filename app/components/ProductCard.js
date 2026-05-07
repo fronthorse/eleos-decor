@@ -11,30 +11,41 @@ export default function ProductCard({
 
   return (
     <div className="col-md-4">
-      <div className="card border-0 shadow-sm h-100">
+      <div className="product-card h-100">
+
         <Link
           href={`/product/${id}`}
           style={{ textDecoration: "none", color: "inherit" }}
         >
-          <img
-            src={image}
-            className="card-img-top"
-            alt={title}
-            style={{
-              height: "350px",
-              objectFit: "cover",
-            }}
-          />
+          <div className="product-image-wrapper">
+            <img
+              src={image}
+              className="product-image"
+              alt={title}
+            />
+          </div>
 
-          <div className="card-body d-flex flex-column">
-            <h5 className="card-title fw-bold">{title}</h5>
+          <div className="p-4">
+            <h5 className="fw-bold mb-3">
+              {title}
+            </h5>
 
-            <p className="card-text text-muted">{description}</p>
+            <p className="text-muted product-description">
+              {description}
+            </p>
           </div>
         </Link>
 
-        <div className="px-3 pb-3 mt-auto">
-          <h6 className="fw-bold mb-3">₦{price}</h6>
+        <div className="px-4 pb-4 mt-auto">
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h5 className="fw-bold mb-0">
+              ₦{price}
+            </h5>
+
+            <span className="gold-text small fw-bold">
+              Premium Decor
+            </span>
+          </div>
 
           <a
             href={`https://wa.me/2348168350533?text=${encodeURIComponent(
@@ -42,11 +53,12 @@ export default function ProductCard({
             )}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="btn btn-dark w-100"
+            className="btn btn-dark w-100 py-3"
           >
             Order on WhatsApp
           </a>
         </div>
+
       </div>
     </div>
   );
