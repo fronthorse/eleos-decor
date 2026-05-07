@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import toast from "react-hot-toast";
 
 export default function AdminPage() {
   const [email, setEmail] = useState("");
@@ -18,6 +19,12 @@ export default function AdminPage() {
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
   const [imageFiles, setImageFiles] = useState([]);
+  const [analytics, setAnalytics] = useState({
+  totalProducts: 0,
+  totalReviews: 0,
+  averageRating: 0,
+  recentProducts: [],
+});
 
   const [editingProductId, setEditingProductId] = useState(null);
 
@@ -31,6 +38,7 @@ export default function AdminPage() {
     if (data.session?.user) {
       setUser(data.session.user);
       fetchProducts();
+      fetchAnalytics();
     }
 
     setCheckingAuth(false);
@@ -46,7 +54,7 @@ export default function AdminPage() {
     });
 
     if (error) {
-      setMessage(error.message);
+      toast.error(error.message);
       return;
     }
 
@@ -54,6 +62,7 @@ export default function AdminPage() {
     setCheckingAuth(false);
     setMessage("");
     fetchProducts();
+    fetchAnalytics();
   }
 
   async function handleLogout() {
@@ -77,7 +86,34 @@ export default function AdminPage() {
 
     setProducts(data || []);
   }
+async function fetchAnalytics() {
+  const { data: productsData } = await supabase
+    .from("products")
+    .select("*")
+    .order("created_at", { ascending: false });
 
+  const { data: reviewsData } = await supabase
+    .from("reviews")
+    .select("*");
+
+  const totalProducts = productsData?.length || 0;
+  const totalReviews = reviewsData?.length || 0;
+
+  const averageRating =
+    totalReviews > 0
+      ? (
+          reviewsData.reduce((sum, review) => sum + review.rating, 0) /
+          totalReviews
+        ).toFixed(1)
+      : 0;
+
+  setAnalytics({
+    totalProducts,
+    totalReviews,
+    averageRating,
+    recentProducts: productsData?.slice(0, 3) || [],
+  });
+}
   async function uploadImages(files) {
     const uploadedImageUrls = [];
 
@@ -159,12 +195,24 @@ export default function AdminPage() {
     .eq("id", product.id);
 
   if (error) {
-    setMessage(error.message);
+    toast.error(error.message);
     return;
   }
 
-  setMessage("Product and images deleted successfully.");
+  toast.success("Product deleted successfully.");
   fetchProducts();
+  fetchAnalytics();
+}
+function generateDescription() {
+  if (!title || !category) {
+    setMessage("Please enter product title and category first.");
+    return;
+  }
+
+  const generatedText = `${title} is a beautiful ${category.toLowerCase()} piece carefully selected by Eleos Decor to bring warmth, elegance, and personality into your space. It is perfect for homes, offices, lounges, and stylish interiors that need a touch of comfort and class.`;
+
+  setDescription(generatedText);
+  setMessage("Description generated successfully.");
 }
   async function handleUploadProduct(e) {
     e.preventDefault();
@@ -193,13 +241,14 @@ export default function AdminPage() {
           .eq("id", editingProductId);
 
         if (error) {
-          setMessage(error.message);
+          toast.error(error.message);
           return;
         }
 
         resetForm();
-        setMessage("Product updated successfully.");
+        toast.success("Product updated successfully.");
         fetchProducts();
+        fetchAnalytics();
         return;
       }
 
@@ -231,10 +280,11 @@ export default function AdminPage() {
       }
 
       resetForm();
-      setMessage("Product uploaded successfully.");
+      toast.success("Product uploaded successfully.");
       fetchProducts();
+      fetchAnalytics();
     } catch (error) {
-      setMessage(error.message);
+      toast.error(error.message);
     }
   }
 
@@ -297,7 +347,28 @@ export default function AdminPage() {
           Logout
         </button>
       </div>
+<div className="row g-4 mb-5">
+  <div className="col-md-4">
+    <div className="soft-card p-4 text-center">
+      <h2 className="fw-bold gold-text">{analytics.totalProducts}</h2>
+      <p className="text-muted mb-0">Total Products</p>
+    </div>
+  </div>
 
+  <div className="col-md-4">
+    <div className="soft-card p-4 text-center">
+      <h2 className="fw-bold gold-text">{analytics.totalReviews}</h2>
+      <p className="text-muted mb-0">Total Reviews</p>
+    </div>
+  </div>
+
+  <div className="col-md-4">
+    <div className="soft-card p-4 text-center">
+      <h2 className="fw-bold gold-text">{analytics.averageRating}</h2>
+      <p className="text-muted mb-0">Average Rating</p>
+    </div>
+  </div>
+</div>
       <form
         onSubmit={handleUploadProduct}
         className="bg-white p-4 rounded shadow-sm"
@@ -361,7 +432,17 @@ export default function AdminPage() {
         </div>
 
         <div className="mb-3">
-          <label className="form-label">Description</label>
+          <div className="d-flex justify-content-between align-items-center mb-2">
+  <label className="form-label mb-0">Description</label>
+
+  <button
+    type="button"
+    onClick={generateDescription}
+    className="btn btn-sm btn-outline-dark"
+  >
+    Generate Description
+  </button>
+</div>
 
           <textarea
             className="form-control"

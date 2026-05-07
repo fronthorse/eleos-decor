@@ -4,6 +4,8 @@ import BootstrapClient from "./components/BootstrapClient";
 import "./globals.css";
 import AOSClient from "./components/AOSClient";
 import { CartProvider } from "../context/CartContext";
+import WhatsAppFloat from "./components/WhatsAppFloat";
+import { Toaster } from "react-hot-toast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,7 +31,20 @@ export default function RootLayout({ children }) {
 
   <CartProvider>
     {children}
+    <WhatsAppFloat />
   </CartProvider>
+  <Toaster
+  position="top-right"
+  toastOptions={{
+    duration: 3000,
+    style: {
+      background: "#1f1f1f",
+      color: "#fff",
+      borderRadius: "14px",
+      padding: "14px 18px",
+    },
+  }}
+/>
 </body>
     </html>
   );

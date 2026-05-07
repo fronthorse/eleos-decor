@@ -4,6 +4,7 @@ import CategoryShowcase from "./components/CategoryShowcase";
 import FeaturedProducts from "./components/FeaturedProducts";
 import TrustSection from "./components/TrustSection";
 import Footer from "./components/Footer";
+import Testimonials from "./components/Testimonials";
 
 export default function Home() {
   return (
@@ -13,6 +14,7 @@ export default function Home() {
       <CategoryShowcase />
       <FeaturedProducts />
       <TrustSection />
+      <Testimonials />
       <Footer />
     </>
   );
