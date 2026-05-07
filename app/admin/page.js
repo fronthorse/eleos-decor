@@ -8,6 +8,7 @@ export default function AdminPage() {
   const [password, setPassword] = useState("");
 
   const [user, setUser] = useState(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [message, setMessage] = useState("");
 
   const [products, setProducts] = useState([]);
@@ -16,24 +17,25 @@ export default function AdminPage() {
   const [category, setCategory] = useState("Frames");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
-  const [imageFile, setImageFile] = useState(null);
-const [checkingAuth, setCheckingAuth] = useState(true);
+  const [imageFiles, setImageFiles] = useState([]);
+
   const [editingProductId, setEditingProductId] = useState(null);
 
-useEffect(() => {
-  checkUserSession();
-}, []);
+  useEffect(() => {
+    checkUserSession();
+  }, []);
 
-async function checkUserSession() {
-  const { data } = await supabase.auth.getSession();
+  async function checkUserSession() {
+    const { data } = await supabase.auth.getSession();
 
-  if (data.session?.user) {
-    setUser(data.session.user);
-    fetchProducts();
+    if (data.session?.user) {
+      setUser(data.session.user);
+      fetchProducts();
+    }
+
+    setCheckingAuth(false);
   }
 
-  setCheckingAuth(false);
-}
   async function handleLogin(e) {
     e.preventDefault();
     setMessage("Logging in...");
@@ -49,8 +51,8 @@ async function checkUserSession() {
     }
 
     setUser(data.user);
-    setMessage("");
     setCheckingAuth(false);
+    setMessage("");
     fetchProducts();
   }
 
@@ -73,26 +75,54 @@ async function checkUserSession() {
       return;
     }
 
-    setProducts(data);
+    setProducts(data || []);
   }
 
-  function handleEditProduct(product) {
-    setEditingProductId(product.id);
-    setTitle(product.title);
-    setCategory(product.category);
-    setPrice(product.price);
-    setDescription(product.description);
-    setImageFile(null);
-    setMessage("Editing product. Update the details and save.");
+  async function uploadImages(files) {
+    const uploadedImageUrls = [];
+
+    for (const file of files) {
+      const safeFileName = `${Date.now()}-${file.name.replaceAll(" ", "-")}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("products")
+        .upload(safeFileName, file);
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+
+      const { data: imageData } = supabase.storage
+        .from("products")
+        .getPublicUrl(safeFileName);
+
+      uploadedImageUrls.push(imageData.publicUrl);
+    }
+
+    return uploadedImageUrls;
   }
 
-  function cancelEdit() {
+  function resetForm() {
     setEditingProductId(null);
     setTitle("");
     setCategory("Frames");
     setPrice("");
     setDescription("");
-    setImageFile(null);
+    setImageFiles([]);
+  }
+
+  function handleEditProduct(product) {
+    setEditingProductId(product.id);
+    setTitle(product.title || "");
+    setCategory(product.category || "Frames");
+    setPrice(product.price || "");
+    setDescription(product.description || "");
+    setImageFiles([]);
+    setMessage("Editing product. Update the details and save.");
+  }
+
+  function cancelEdit() {
+    resetForm();
     setMessage("");
   }
 
@@ -120,113 +150,84 @@ async function checkUserSession() {
   async function handleUploadProduct(e) {
     e.preventDefault();
 
-    if (editingProductId) {
-      setMessage("Updating product...");
+    try {
+      if (editingProductId) {
+        setMessage("Updating product...");
 
-      let updatedProduct = {
-        title,
-        category,
-        price,
-        description,
-      };
-
-      if (imageFile) {
-        const fileName = `${Date.now()}-${imageFile.name}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("products")
-          .upload(fileName, imageFile);
-
-        if (uploadError) {
-          setMessage(uploadError.message);
-          return;
-        }
-
-        const { data: imageData } = supabase.storage
-          .from("products")
-          .getPublicUrl(fileName);
-
-        updatedProduct.image_url = imageData.publicUrl;
-      }
-
-      const { error } = await supabase
-        .from("products")
-        .update(updatedProduct)
-        .eq("id", editingProductId);
-
-      if (error) {
-        setMessage(error.message);
-        return;
-      }
-
-      setEditingProductId(null);
-      setTitle("");
-      setCategory("Frames");
-      setPrice("");
-      setDescription("");
-      setImageFile(null);
-
-      setMessage("Product updated successfully.");
-      fetchProducts();
-      return;
-    }
-
-    setMessage("Uploading product...");
-
-    if (!imageFile) {
-      setMessage("Please select a product image.");
-      return;
-    }
-
-    const fileName = `${Date.now()}-${imageFile.name}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("products")
-      .upload(fileName, imageFile);
-
-    if (uploadError) {
-      setMessage(uploadError.message);
-      return;
-    }
-
-    const { data: imageData } = supabase.storage
-      .from("products")
-      .getPublicUrl(fileName);
-
-    const { error: insertError } = await supabase
-      .from("products")
-      .insert([
-        {
+        const updatedProduct = {
           title,
           category,
           price,
           description,
-          image_url: imageData.publicUrl,
-        },
-      ]);
+        };
 
-    if (insertError) {
-      setMessage(insertError.message);
-      return;
+        if (imageFiles.length > 0) {
+          const uploadedImageUrls = await uploadImages(imageFiles);
+
+          updatedProduct.image_url = uploadedImageUrls[0];
+          updatedProduct.gallery_images = uploadedImageUrls;
+        }
+
+        const { error } = await supabase
+          .from("products")
+          .update(updatedProduct)
+          .eq("id", editingProductId);
+
+        if (error) {
+          setMessage(error.message);
+          return;
+        }
+
+        resetForm();
+        setMessage("Product updated successfully.");
+        fetchProducts();
+        return;
+      }
+
+      setMessage("Uploading product...");
+
+      if (!imageFiles || imageFiles.length === 0) {
+        setMessage("Please select at least one product image.");
+        return;
+      }
+
+      const uploadedImageUrls = await uploadImages(imageFiles);
+
+      const { error: insertError } = await supabase
+        .from("products")
+        .insert([
+          {
+            title,
+            category,
+            price,
+            description,
+            image_url: uploadedImageUrls[0],
+            gallery_images: uploadedImageUrls,
+          },
+        ]);
+
+      if (insertError) {
+        setMessage(insertError.message);
+        return;
+      }
+
+      resetForm();
+      setMessage("Product uploaded successfully.");
+      fetchProducts();
+    } catch (error) {
+      setMessage(error.message);
     }
-
-    setTitle("");
-    setCategory("Frames");
-    setPrice("");
-    setDescription("");
-    setImageFile(null);
-
-    setMessage("Product uploaded successfully.");
-    fetchProducts();
   }
-if (checkingAuth) {
-  return (
-    <div className="container py-5 text-center">
-      <h4 className="fw-bold">Checking admin access...</h4>
-      <p className="text-muted">Please wait.</p>
-    </div>
-  );
-}
+
+  if (checkingAuth) {
+    return (
+      <div className="container py-5 text-center">
+        <h4 className="fw-bold">Checking admin access...</h4>
+        <p className="text-muted">Please wait.</p>
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <div className="container py-5" style={{ maxWidth: "500px" }}>
@@ -235,6 +236,7 @@ if (checkingAuth) {
         <form onSubmit={handleLogin} className="bg-white p-4 rounded shadow-sm">
           <div className="mb-3">
             <label className="form-label">Email</label>
+
             <input
               type="email"
               className="form-control"
@@ -246,6 +248,7 @@ if (checkingAuth) {
 
           <div className="mb-3">
             <label className="form-label">Password</label>
+
             <input
               type="password"
               className="form-control"
@@ -287,6 +290,7 @@ if (checkingAuth) {
 
         <div className="mb-3">
           <label className="form-label">Product Title</label>
+
           <input
             type="text"
             className="form-control"
@@ -299,6 +303,7 @@ if (checkingAuth) {
 
         <div className="mb-3">
           <label className="form-label">Category</label>
+
           <select
             className="form-select"
             value={category}
@@ -325,6 +330,7 @@ if (checkingAuth) {
 
         <div className="mb-3">
           <label className="form-label">Price</label>
+
           <input
             type="text"
             className="form-control"
@@ -337,6 +343,7 @@ if (checkingAuth) {
 
         <div className="mb-3">
           <label className="form-label">Description</label>
+
           <textarea
             className="form-control"
             rows="4"
@@ -350,17 +357,23 @@ if (checkingAuth) {
         <div className="mb-4">
           <label className="form-label">
             {editingProductId
-              ? "Replace Product Image (Optional)"
-              : "Product Image"}
+              ? "Replace Product Images (Optional)"
+              : "Product Images"}
           </label>
 
           <input
             type="file"
             className="form-control"
             accept="image/*"
-            onChange={(e) => setImageFile(e.target.files[0])}
+            multiple
+            onChange={(e) => setImageFiles(Array.from(e.target.files))}
             required={!editingProductId}
           />
+
+          <small className="text-muted d-block mt-2">
+  Hold CTRL (Windows) or CMD (Mac) to select multiple images.
+  The first selected image becomes the main product image.
+</small>
         </div>
 
         <button className="btn btn-dark w-100">
@@ -405,6 +418,13 @@ if (checkingAuth) {
                   <p className="fw-bold">₦{product.price}</p>
 
                   <p className="text-muted small">{product.description}</p>
+
+                  {product.gallery_images?.length > 0 && (
+                    <p className="small text-muted">
+                      {product.gallery_images.length} image
+                      {product.gallery_images.length === 1 ? "" : "s"} uploaded
+                    </p>
+                  )}
 
                   <div className="d-flex gap-2 mt-auto">
                     <button

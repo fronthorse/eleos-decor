@@ -4,6 +4,7 @@ import Navbar from "../.././components/Navbar";
 import Footer from "../.././components/Footer";
 import ProductCard from "../.././components/ProductCard";
 import { supabase } from "../../../lib/supabaseClient";
+import ProductGallery from "../.././components/ProductGallery";
 
 export default async function ProductDetails({ params }) {
   const { id } = await params;
@@ -52,17 +53,12 @@ export default async function ProductDetails({ params }) {
 
           <div className="row align-items-center g-5">
             <div className="col-md-6">
-              <img
-                src={product.image_url}
-                alt={product.title}
-                className="img-fluid rounded shadow"
-                style={{
-                  width: "100%",
-                  height: "520px",
-                  objectFit: "cover",
-                }}
-              />
-            </div>
+  <ProductGallery
+    mainImage={product.image_url}
+    galleryImages={product.gallery_images}
+    title={product.title}
+  />
+</div>
 
             <div className="col-md-6">
               <span className="badge bg-dark mb-3 px-3 py-2">
