@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabaseClient";
+import { createClient } from "../../lib/supabase/client";
 import toast from "react-hot-toast";
+import { useRouter } from "next/navigation";
 
 export default function AdminPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
+const supabase = createClient();
+const router = useRouter();
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [message, setMessage] = useState("");
@@ -66,12 +68,15 @@ export default function AdminPage() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut();
-    setUser(null);
-    setProducts([]);
-    setCheckingAuth(false);
-    setMessage("Logged out successfully.");
-  }
+  await supabase.auth.signOut();
+
+  setUser(null);
+  setProducts([]);
+  setCheckingAuth(false);
+
+  router.push("/admin/login");
+  router.refresh();
+}
 
   async function fetchProducts() {
     const { data, error } = await supabase
@@ -296,44 +301,14 @@ function generateDescription() {
       </div>
     );
   }
-
-  if (!user) {
-    return (
-      <div className="container py-5" style={{ maxWidth: "500px" }}>
-        <h1 className="fw-bold mb-4">Eleos Decor Admin</h1>
-
-        <form onSubmit={handleLogin} className="bg-white p-4 rounded shadow-sm">
-          <div className="mb-3">
-            <label className="form-label">Email</label>
-
-            <input
-              type="email"
-              className="form-control"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="mb-3">
-            <label className="form-label">Password</label>
-
-            <input
-              type="password"
-              className="form-control"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-
-          <button className="btn btn-dark w-100">Login</button>
-
-          {message && <p className="mt-3 text-muted">{message}</p>}
-        </form>
-      </div>
-    );
-  }
+if (!user) {
+  return (
+    <div className="container py-5 text-center">
+      <h4 className="fw-bold">Loading admin dashboard...</h4>
+      <p className="text-muted">Please wait.</p>
+    </div>
+  );
+}
 
   return (
     <div className="container py-5">

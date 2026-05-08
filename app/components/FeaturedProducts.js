@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import ProductCard from "./ProductCard";
-import { supabase } from "../../lib/supabaseClient";
+import { createClient } from "../../lib/supabase/client";
 import ProductSkeleton from ".././components/ProductSkeleton";
 
 export default function FeaturedProducts() {
+  const supabase = createClient();
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 

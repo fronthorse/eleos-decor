@@ -3,12 +3,13 @@ import Link from "next/link";
 import Navbar from "../.././components/Navbar";
 import Footer from "../.././components/Footer";
 import ProductCard from "../.././components/ProductCard";
-import { supabase } from "../../../lib/supabaseClient";
+import { createClient } from "../../../lib/supabase/server";
 import ProductGallery from "../.././components/ProductGallery";
 import WhatsAppOrderBox from "../.././components/WhatsAppOrderBox";
 import ProductReviews from "../.././components/ProductReviews";
 
 export default async function ProductDetails({ params }) {
+  const supabase = await createClient();
   const { id } = await params;
 
   const { data: product, error } = await supabase

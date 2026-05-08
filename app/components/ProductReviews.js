@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabaseClient";
+import { createClient } from "../../lib/supabase/client";
 
 export default function ProductReviews({ productId }) {
+  const supabase = createClient();
   const [reviews, setReviews] = useState([]);
   const [customerName, setCustomerName] = useState("");
   const [rating, setRating] = useState(5);

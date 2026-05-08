@@ -6,10 +6,11 @@ import { useSearchParams } from "next/navigation";
 import Navbar from ".././components/Navbar";
 import Footer from ".././components/Footer";
 import ProductCard from ".././components/ProductCard";
-import { supabase } from "../../lib/supabaseClient";
+import { createClient } from "../../lib/supabase/client";
 import ProductSkeleton from ".././components/ProductSkeleton";
 
 function ShopContent() {
+  const supabase = createClient();
   const searchParams = useSearchParams();
   const categoryFromUrl = searchParams.get("category");
 
