@@ -1,12 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCart } from "../../context/CartContext";
+import { createClient } from "../../lib/supabase/client";
 import MiniCartDrawer from "./MiniCartDrawer";
+import { useRouter } from "next/navigation";
 
 export default function Navbar() {
-  const { cartCount } = useCart();
+  const supabase = createClient();
+const router = useRouter();
+  const { cartCount, clearCart } = useCart();
   const [cartOpen, setCartOpen] = useState(false);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    checkUser();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function checkUser() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    setUser(session?.user || null);
+  }
+
+  async function handleLogout() {
+  await supabase.auth.signOut();
+
+  clearCart();
+  localStorage.removeItem("eleos-cart");
+
+  setUser(null);
+
+  router.push("/");
+  router.refresh();
+}
 
   return (
     <>
@@ -40,20 +77,61 @@ export default function Navbar() {
           <div className="collapse navbar-collapse order-lg-1" id="navbarNav">
             <ul className="navbar-nav ms-lg-auto align-items-lg-center gap-lg-3 mt-3 mt-lg-0">
               <li className="nav-item">
-                <a className="nav-link" href="/">Home</a>
+                <a className="nav-link" href="/">
+                  Home
+                </a>
               </li>
 
               <li className="nav-item">
-                <a className="nav-link" href="/shop">Shop</a>
+                <a className="nav-link" href="/shop">
+                  Shop
+                </a>
               </li>
 
               <li className="nav-item">
-                <a className="nav-link" href="/about">About</a>
+                <a className="nav-link" href="/about">
+                  About
+                </a>
               </li>
 
               <li className="nav-item">
-                <a className="nav-link" href="/contact">Contact</a>
+                <a className="nav-link" href="/contact">
+                  Contact
+                </a>
               </li>
+
+              {!user ? (
+                <>
+                  <li className="nav-item">
+                    <a className="nav-link" href="/customer/login">
+                      Login
+                    </a>
+                  </li>
+
+                  <li className="nav-item">
+                    <a className="btn btn-sm btn-dark px-4" href="/customer/signup">
+                      Sign Up
+                    </a>
+                  </li>
+                </>
+              ) : (
+                <>
+                  <li className="nav-item">
+                    <a className="nav-link" href="/customer/dashboard">
+                      Dashboard
+                    </a>
+                  </li>
+
+                  <li className="nav-item">
+                    <button
+                      onClick={handleLogout}
+                      className="btn btn-sm btn-outline-dark px-4"
+                    >
+                      Logout
+                    </button>
+                  </li>
+                </>
+              )}
             </ul>
           </div>
         </div>
