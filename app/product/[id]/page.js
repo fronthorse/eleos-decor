@@ -7,6 +7,8 @@ import { createClient } from "../../../lib/supabase/server";
 import ProductGallery from "../.././components/ProductGallery";
 import WhatsAppOrderBox from "../.././components/WhatsAppOrderBox";
 import ProductReviews from "../.././components/ProductReviews";
+import TrackRecentlyViewed from "../.././components/TrackRecentlyViewed";
+import RecentlyViewedSection from "../.././components/RecentlyViewedSection";
 
 export default async function ProductDetails({ params }) {
   const supabase = await createClient();
@@ -22,6 +24,7 @@ export default async function ProductDetails({ params }) {
     return (
       <>
         <Navbar />
+        
         <div className="container py-5" style={{ marginTop: "100px" }}>
           <h1>Product not found</h1>
           <Link href="/shop" className="btn btn-dark mt-3">
@@ -42,7 +45,7 @@ export default async function ProductDetails({ params }) {
   return (
     <>
       <Navbar />
-
+<TrackRecentlyViewed product={product} />
       <section className="luxury-section" style={{ marginTop: "70px" }}>
         <div className="container">
           <div className="mb-4">
@@ -106,6 +109,7 @@ export default async function ProductDetails({ params }) {
         </section>
       )}
       <ProductReviews productId={product.id} />
+      <RecentlyViewedSection currentProductId={product.id} />
       <Footer />
     </>
   );

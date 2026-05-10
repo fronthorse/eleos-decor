@@ -22,7 +22,7 @@ export default function FeaturedProducts() {
       .limit(3);
 
     if (error) {
-      console.log(error);
+     
       setLoading(false);
       return;
     }

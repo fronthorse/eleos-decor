@@ -2,7 +2,8 @@
 
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-
+import CheckoutForm from "../components/CheckoutForm";
+import EmptyState from "../components/EmptyState";
 import { useCart } from "../../context/CartContext";
 
 export default function CartPage() {
@@ -14,76 +15,36 @@ export default function CartPage() {
     cartTotal,
   } = useCart();
 
-  const whatsappNumber = "2348168350533";
-
-  const orderMessage = `
-Hello Eleos Decor,
-
-I would like to place an order:
-
-${cartItems
-  .map(
-    (item) => `
-• ${item.title}
-Quantity: ${item.quantity}
-Price: ₦${item.price}
-`
-  )
-  .join("\n")}
-
-Total: ₦${cartTotal.toLocaleString()}
-
-Thank you.
-`;
-
-  const whatsappLink = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
-    orderMessage
-  )}`;
-
   return (
     <>
       <Navbar />
 
-      <section
-        className="luxury-section"
-        style={{ marginTop: "80px" }}
-      >
+      <section className="luxury-section" style={{ marginTop: "80px" }}>
         <div className="container">
           <div className="text-center mb-5">
-            <p className="section-label">
-              Your Cart
-            </p>
+            <p className="section-label">Your Cart</p>
 
-            <h1 className="luxury-heading">
-              Shopping Cart
-            </h1>
+            <h1 className="luxury-heading">Shopping Cart</h1>
           </div>
 
           {cartItems.length === 0 ? (
-            <div className="text-center py-5">
-              <h4>Your cart is empty</h4>
-
-              <p className="text-muted">
-                Add beautiful decor items to your cart.
-              </p>
-
-              <a href="/shop" className="btn btn-dark mt-3">
-                Continue Shopping
-              </a>
-            </div>
+            <EmptyState
+  title="Your cart is empty"
+  message="Add beautiful decor items to your cart and return here to complete checkout."
+  actionText="Continue Shopping"
+  actionHref="/shop"
+/>
           ) : (
             <div className="row g-5">
               <div className="col-lg-8">
                 {cartItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="soft-card p-3 mb-4"
-                  >
-                    <div className="row align-items-center">
+                  <div key={item.id} className="soft-card p-3 mb-4">
+                    <div className="row align-items-center g-3">
                       <div className="col-md-3">
                         <img
                           src={item.image_url}
                           alt={item.title}
+                          loading="lazy"
                           className="img-fluid rounded"
                           style={{
                             height: "140px",
@@ -94,9 +55,7 @@ Thank you.
                       </div>
 
                       <div className="col-md-5">
-                        <h5 className="fw-bold">
-                          {item.title}
-                        </h5>
+                        <h5 className="fw-bold">{item.title}</h5>
 
                         <p className="text-muted mb-0">
                           ₦{item.price}
@@ -120,9 +79,7 @@ Thank you.
 
                       <div className="col-md-2">
                         <button
-                          onClick={() =>
-                            removeFromCart(item.id)
-                          }
+                          onClick={() => removeFromCart(item.id)}
                           className="btn btn-outline-danger w-100"
                         >
                           Remove
@@ -152,27 +109,21 @@ Thank you.
                   </div>
 
                   <div className="d-flex justify-content-between mb-4">
-                    <span className="fw-bold">
-                      Total
-                    </span>
+                    <span className="fw-bold">Total</span>
 
                     <span className="fw-bold">
                       ₦{cartTotal.toLocaleString()}
                     </span>
                   </div>
 
-                  <a
-                    href={whatsappLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-dark w-100 mb-3"
-                  >
-                    Checkout on WhatsApp
-                  </a>
+                  <CheckoutForm
+                    cartItems={cartItems}
+                    cartTotal={cartTotal}
+                  />
 
                   <button
                     onClick={clearCart}
-                    className="btn btn-outline-dark w-100"
+                    className="btn btn-outline-dark w-100 mt-2"
                   >
                     Clear Cart
                   </button>

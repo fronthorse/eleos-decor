@@ -6,11 +6,14 @@ import { useSearchParams } from "next/navigation";
 import Navbar from ".././components/Navbar";
 import Footer from ".././components/Footer";
 import ProductCard from ".././components/ProductCard";
-import { createClient } from "../../lib/supabase/client";
 import ProductSkeleton from ".././components/ProductSkeleton";
+import EmptyState from ".././components/EmptyState";
+
+import { createClient } from "../../lib/supabase/client";
 
 function ShopContent() {
   const supabase = createClient();
+
   const searchParams = useSearchParams();
   const categoryFromUrl = searchParams.get("category");
 
@@ -18,25 +21,32 @@ function ShopContent() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOption, setSortOption] = useState("newest");
+  const [visibleCount, setVisibleCount] = useState(12);
   const [loading, setLoading] = useState(true);
 
   const categories = [
     "All",
     "Frames",
-    "Plants",
     "Mirrors",
-    "Diffusers",
-    "Humidifiers",
+    "Wall Clocks",
+    "Wall Art",
     "Rugs",
+    "Throw Pillows",
+    "Throw Blankets",
+    "Bedsheets",
     "Tables",
+    "Chairs",
     "Dining Sets",
-    "Flowers",
+    "Ornaments",
     "Figurines",
     "Faux Books",
-    "Wall Clocks",
-    "Ornaments",
-    "Chairs",
+    "Lamps",
+    "Diffusers",
+    "Humidifiers",
     "Scented Candles",
+    "Plants",
+    "Flowers",
+    "Artificial Water Fountains",
   ];
 
   useEffect(() => {
@@ -49,6 +59,10 @@ function ShopContent() {
     }
   }, [categoryFromUrl]);
 
+  useEffect(() => {
+    setVisibleCount(12);
+  }, [selectedCategory, searchTerm, sortOption]);
+
   async function fetchProducts() {
     const { data, error } = await supabase
       .from("products")
@@ -56,7 +70,7 @@ function ShopContent() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.log(error);
+      
       setLoading(false);
       return;
     }
@@ -66,7 +80,12 @@ function ShopContent() {
   }
 
   function getNumericPrice(price) {
-    return Number(String(price).replace(/,/g, ""));
+    return Number(
+      String(price)
+        .replace(/₦/g, "")
+        .replace(/,/g, "")
+        .trim()
+    );
   }
 
   const filteredProducts = products
@@ -74,10 +93,17 @@ function ShopContent() {
       const matchesCategory =
         selectedCategory === "All" || product.category === selectedCategory;
 
+      const search = searchTerm.toLowerCase().trim();
+
+      const searchableText = `
+        ${product.title || ""}
+        ${product.description || ""}
+        ${product.category || ""}
+        ${product.price || ""}
+      `.toLowerCase();
+
       const matchesSearch =
-        product.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.category.toLowerCase().includes(searchTerm.toLowerCase());
+        search === "" || searchableText.includes(search);
 
       return matchesCategory && matchesSearch;
     })
@@ -101,6 +127,8 @@ function ShopContent() {
       return 0;
     });
 
+  const visibleProducts = filteredProducts.slice(0, visibleCount);
+
   return (
     <>
       <Navbar />
@@ -109,6 +137,7 @@ function ShopContent() {
         <div className="container">
           <div className="text-center mb-5">
             <h1 className="fw-bold">Shop Eleos Decor</h1>
+
             <p className="text-muted">
               Explore elegant décor pieces for beautiful living spaces.
             </p>
@@ -119,7 +148,7 @@ function ShopContent() {
               <input
                 type="text"
                 className="form-control form-control-lg"
-                placeholder="Search products, categories, or descriptions..."
+                placeholder="Search products, categories, descriptions, or prices..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -139,58 +168,91 @@ function ShopContent() {
             </div>
           </div>
 
-          <div className="d-flex flex-wrap justify-content-center gap-3 mb-5">
-            {categories.map((category) => (
-              <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                className={`btn ${
-                  selectedCategory === category
-                    ? "btn-dark"
-                    : "btn-outline-dark"
-                }`}
+          <div className="row g-3 align-items-center mb-5">
+            <div className="col-md-6">
+              <label className="form-label fw-bold">
+                Filter by Category
+              </label>
+
+              <select
+                className="form-select form-select-lg"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
               >
-                {category}
-              </button>
-            ))}
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-md-6">
+              <label className="form-label fw-bold">
+                Current Selection
+              </label>
+
+              <div className="bg-white border rounded-pill px-4 py-3">
+                {selectedCategory === "All"
+                  ? "Showing all categories"
+                  : `Showing ${selectedCategory}`}
+              </div>
+            </div>
           </div>
 
           {!loading && (
             <p className="text-muted mb-4">
-              Showing {filteredProducts.length} product
+              Showing {visibleProducts.length} of {filteredProducts.length} product
               {filteredProducts.length === 1 ? "" : "s"}
             </p>
           )}
 
           {loading && (
-  <div className="row g-4">
-    {[1, 2, 3, 4, 5, 6].map((item) => (
-      <ProductSkeleton key={item} />
-    ))}
-  </div>
-)}
-
-          {!loading && filteredProducts.length === 0 && (
-            <div className="text-center py-5">
-              <h4>No products found</h4>
-              <p className="text-muted">
-                Try another search term or category.
-              </p>
+            <div className="row g-4">
+              {[1, 2, 3, 4, 5, 6].map((item) => (
+                <ProductSkeleton key={item} />
+              ))}
             </div>
           )}
 
-          <div className="row g-4">
-            {filteredProducts.map((product) => (
-              <ProductCard
-                key={product.id}
-                id={product.id}
-                image={product.image_url}
-                title={product.title}
-                description={product.description}
-                price={product.price}
-              />
-            ))}
-          </div>
+          {!loading && filteredProducts.length === 0 && (
+            <EmptyState
+  title="No products found"
+  message="Try another search term, category, or sorting option."
+  actionText="View All Products"
+  actionHref="/shop"
+/>
+          )}
+
+          {!loading && filteredProducts.length > 0 && (
+            <>
+              <div className="row g-4">
+                {visibleProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    id={product.id}
+                    image={product.image_url}
+                    title={product.title}
+                    description={product.description}
+                    price={product.price}
+                  />
+                ))}
+              </div>
+
+              {visibleCount < filteredProducts.length && (
+                <div className="text-center mt-5">
+                  <button
+                    onClick={() =>
+                      setVisibleCount((count) => count + 12)
+                    }
+                    className="btn btn-outline-dark px-5"
+                  >
+                    Load More
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </section>
 
