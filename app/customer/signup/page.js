@@ -52,7 +52,7 @@ export default function CustomerSignupPage() {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${window.location.origin}/customer/dashboard`,
+      redirectTo: `${window.location.origin}/auth/callback?next=/customer/dashboard`,
     },
   });
 
