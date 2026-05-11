@@ -110,6 +110,11 @@ async function handleGoogleLogin() {
             Show password
           </label>
         </div>
+        <div className="text-end mb-3">
+  <a href="/customer/forgot-password" className="text-decoration-none small">
+    Forgot password?
+  </a>
+</div>
 <button
   type="button"
   onClick={handleGoogleLogin}
