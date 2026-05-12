@@ -12,6 +12,7 @@ export default function CheckoutForm({ cartItems, cartTotal, compact = false }) 
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
+  const [guestAddress, setGuestAddress] = useState("");
   const [orderNote, setOrderNote] = useState("");
   const [message, setMessage] = useState("");
 
@@ -42,9 +43,12 @@ export default function CheckoutForm({ cartItems, cartTotal, compact = false }) 
   async function handleCheckout() {
     if (cartItems.length === 0) return;
 
+    const orderNumber = `ELEOS-${Date.now()}`;
+
     const customerName = user ? profile?.full_name || "" : guestName;
     const customerPhone = user ? profile?.phone || "" : guestPhone;
-   const customerEmail = user?.email || guestEmail || null;
+    const customerEmail = user?.email || guestEmail || null;
+    const customerAddress = guestAddress || "Not provided";
 
     if (!customerName || !customerPhone) {
       setMessage(
@@ -57,42 +61,58 @@ export default function CheckoutForm({ cartItems, cartTotal, compact = false }) 
 
     setMessage("Preparing your WhatsApp order...");
 
-    const orderMessage = `
-Hello Eleos Decor,
+ const orderMessage = `
+🛍️ *NEW ORDER - ELEOS DECOR*
 
-I would like to place an order:
+━━━━━━━━━━━━━━━
+🆔 Order ID: ${orderNumber}
+━━━━━━━━━━━━━━━
 
 ${cartItems
   .map(
-    (item) => `
-• ${item.title}
+    (item, index) => `
+${index + 1}. ${item.title}
+
 Quantity: ${item.quantity}
-Price: ₦${item.price}
+Price: ₦${parseFloat(
+      item.price.toString().replace(/,/g, "")
+    ).toLocaleString()}
 `
   )
   .join("\n")}
 
-Total: ₦${cartTotal.toLocaleString()}
+━━━━━━━━━━━━━━━
+💰 Total: ₦${Number(
+  cartTotal.toString().replace(/,/g, "")
+).toLocaleString()}
+━━━━━━━━━━━━━━━
 
-Customer Name: ${customerName}
-Phone Number: ${customerPhone}
+👤 CUSTOMER DETAILS
+
+Name: ${customerName}
+Phone: ${customerPhone}
 Email: ${customerEmail || "Guest customer"}
 
-Order Note:
+📍 Delivery Address:
+${customerAddress}
+
+📝 Order Note:
 ${orderNote || "None"}
 
-Thank you.
+Thank you for shopping with Eleos Decor ✨
 `;
 
     const { error } = await supabase.from("checkout_inquiries").insert([
       {
-        user_id: user?.id || null,
-        customer_email: customerEmail,
+        order_number: orderNumber,
         customer_name: customerName,
         customer_phone: customerPhone,
+        customer_email: customerEmail,
+        delivery_address: customerAddress,
         items: cartItems,
         total_amount: cartTotal,
-        status: "pending",
+        order_note: orderNote || null,
+        status: "New",
       },
     ]);
 
@@ -102,26 +122,21 @@ Thank you.
     }
 
     fetch("/api/send-inquiry-email", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    customerName,
-    customerPhone,
-    customerEmail,
-    items: cartItems,
-    totalAmount: cartTotal,
-    orderNote,
-  }),
-})
-  .then(async (res) => {
-    const data = await res.json();
-   
-  })
-  .catch((error) => {
-   
-  });
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        orderNumber,
+        customerName,
+        customerPhone,
+        customerEmail,
+        customerAddress,
+        items: cartItems,
+        totalAmount: cartTotal,
+        orderNote,
+      }),
+    }).catch(() => {});
 
     const whatsappLink = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
       orderMessage
@@ -129,7 +144,7 @@ Thank you.
 
     window.open(whatsappLink, "_blank");
 
-    setMessage("Inquiry saved. Continue on WhatsApp.");
+    setMessage("Order saved. Continue on WhatsApp.");
   }
 
   return (
@@ -142,7 +157,6 @@ Thank you.
 
           <div className="mb-3">
             <label className="form-label">Name</label>
-
             <input
               type="text"
               className="form-control"
@@ -154,7 +168,6 @@ Thank you.
 
           <div className="mb-3">
             <label className="form-label">Phone Number</label>
-
             <input
               type="text"
               className="form-control"
@@ -163,19 +176,30 @@ Thank you.
               placeholder="e.g. 08123456789"
             />
           </div>
-          <div className="mb-3">
-  <label className="form-label">Email Address</label>
 
-  <input
-    type="email"
-    className="form-control"
-    value={guestEmail}
-    onChange={(e) => setGuestEmail(e.target.value)}
-    placeholder="your@email.com"
-  />
-</div>
+          <div className="mb-3">
+            <label className="form-label">Email Address</label>
+            <input
+              type="email"
+              className="form-control"
+              value={guestEmail}
+              onChange={(e) => setGuestEmail(e.target.value)}
+              placeholder="your@email.com"
+            />
+          </div>
         </>
       )}
+
+      <div className="mb-3">
+        <label className="form-label">Delivery Address</label>
+        <textarea
+          className="form-control"
+          rows="2"
+          value={guestAddress}
+          onChange={(e) => setGuestAddress(e.target.value)}
+          placeholder="Enter delivery address"
+        ></textarea>
+      </div>
 
       {user && (
         <div className="alert alert-light border small">
@@ -189,7 +213,6 @@ Thank you.
 
       <div className="mb-3">
         <label className="form-label">Order Note</label>
-
         <textarea
           className="form-control"
           rows={compact ? "2" : "3"}

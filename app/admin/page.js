@@ -327,21 +327,22 @@ async function fetchAnalytics() {
     }
   }
 
-  async function handleUpdateInquiryStatus(id, status) {
-    const { error } = await supabase
-      .from("checkout_inquiries")
-      .update({ status })
-      .eq("id", id);
+  async function handleUpdateInquiryStatus(id, newStatus) {
+  const { error } = await supabase
+    .from("checkout_inquiries")
+    .update({
+      status: newStatus,
+    })
+    .eq("id", id);
 
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-
-    toast.success("Inquiry status updated.");
+  if (error) {
+    console.error(error);
+  } else {
+toast.success("Inquiry status updated.");
     fetchInquiries();
-    fetchAnalytics();
+fetchAnalytics();
   }
+}
 
   if (checkingAuth) {
     return (
@@ -655,9 +656,9 @@ async function fetchAnalytics() {
                   <div className="soft-card p-4 h-100">
                     <div className="d-flex justify-content-between align-items-start mb-3">
                       <div>
-                        <h5 className="fw-bold mb-1">
-                          Inquiry #{inquiry.id}
-                        </h5>
+                        <h6 className="fw-bold mb-1">
+  Order ID: {inquiry.order_number || `Inquiry #${inquiry.id}`}
+</h6>
 
                         <p className="text-muted small mb-0">
                           {new Date(inquiry.created_at).toLocaleString()}
@@ -716,16 +717,16 @@ async function fetchAnalytics() {
                       className="form-select"
                       value={inquiry.status}
                       onChange={(e) =>
-                        handleUpdateInquiryStatus(inquiry.id, e.target.value)
-                      }
+  handleUpdateInquiryStatus(inquiry.id, e.target.value)
+}
                     >
-                      <option value="pending">pending</option>
-                      <option value="contacted">contacted</option>
-                      <option value="payment_confirmed">
-                        payment_confirmed
-                      </option>
-                      <option value="fulfilled">fulfilled</option>
-                      <option value="cancelled">cancelled</option>
+                      <option value="New">New</option>
+<option value="Contacted">Contacted</option>
+<option value="Payment Pending">Payment Pending</option>
+<option value="Paid">Paid</option>
+<option value="Processing">Processing</option>
+<option value="Delivered">Delivered</option>
+<option value="Cancelled">Cancelled</option>
                     </select>
                   </div>
                 </div>
