@@ -11,8 +11,24 @@ export default function CustomerSignupPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleGoogleSignup() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    if (error) {
+      setMessage(error.message);
+    }
+  }
 
   async function handleSignup() {
+    if (isSubmitting) return;
+
     if (!email || !password || !confirmPassword) {
       setMessage("Please fill in all fields.");
       return;
@@ -28,17 +44,32 @@ export default function CustomerSignupPage() {
       return;
     }
 
+    setIsSubmitting(true);
     setMessage("Creating account...");
 
     const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+  email,
+  password,
+  options: {
+    emailRedirectTo: `${window.location.origin}/auth/callback`,
+  },
+});
 
     if (error) {
+      setIsSubmitting(false);
+
+      if (error.message.toLowerCase().includes("rate limit")) {
+        setMessage(
+          "Too many signup emails have been requested. Please wait a few minutes before trying again."
+        );
+        return;
+      }
+
       setMessage(error.message);
       return;
     }
+
+    setIsSubmitting(false);
 
     setMessage(
       "Account created. Please check your email and confirm your account before logging in."
@@ -48,18 +79,6 @@ export default function CustomerSignupPage() {
     setPassword("");
     setConfirmPassword("");
   }
-  async function handleGoogleSignup() {
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: `${window.location.origin}/auth/callback`,
-    },
-  });
-
-  if (error) {
-    setMessage(error.message);
-  }
-}
 
   return (
     <div
@@ -73,6 +92,14 @@ export default function CustomerSignupPage() {
       </p>
 
       <div className="bg-white p-4 rounded shadow-sm">
+        <button
+          type="button"
+          onClick={handleGoogleSignup}
+          className="btn btn-outline-dark w-100 mb-3"
+        >
+          Continue with Google
+        </button>
+
         <div className="mb-3">
           <label className="form-label">Email</label>
 
@@ -81,6 +108,7 @@ export default function CustomerSignupPage() {
             className="form-control"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            disabled={isSubmitting}
           />
         </div>
 
@@ -92,6 +120,7 @@ export default function CustomerSignupPage() {
             className="form-control"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            disabled={isSubmitting}
           />
         </div>
 
@@ -103,6 +132,7 @@ export default function CustomerSignupPage() {
             className="form-control"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
+            disabled={isSubmitting}
           />
         </div>
 
@@ -113,25 +143,21 @@ export default function CustomerSignupPage() {
             id="showPassword"
             checked={showPassword}
             onChange={() => setShowPassword(!showPassword)}
+            disabled={isSubmitting}
           />
 
           <label className="form-check-label" htmlFor="showPassword">
             Show password
           </label>
         </div>
-<button
-  type="button"
-  onClick={handleGoogleSignup}
-  className="btn btn-outline-dark w-100 mb-3"
->
-  Continue with Google
-</button>
+
         <button
           type="button"
           onClick={handleSignup}
           className="btn btn-dark w-100 mb-3"
+          disabled={isSubmitting}
         >
-          Create Account
+          {isSubmitting ? "Creating account..." : "Create Account"}
         </button>
 
         <p className="text-muted text-center mb-0">
