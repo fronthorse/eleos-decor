@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
+import toast from "react-hot-toast";
+
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
-import Image from "next/image";
 
 export default function ProductCard({
   id,
@@ -17,6 +19,28 @@ export default function ProductCard({
 
   const saved = isInWishlist(id);
 
+  function handleAddToCart() {
+    addToCart({
+      id,
+      title,
+      price,
+      image_url: image,
+    });
+
+    toast.success("Added to cart");
+  }
+
+  async function handleWishlistClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const result = await toggleWishlist(id);
+
+    if (result?.message) {
+      result.success ? toast.success(result.message) : toast.error(result.message);
+    }
+  }
+
   return (
     <div className="col-md-4">
       <div className="product-card h-100">
@@ -26,23 +50,22 @@ export default function ProductCard({
         >
           <div className="product-image-wrapper">
             <button
-              onClick={async (e) => {
-                e.preventDefault();
-                await toggleWishlist(id);
-              }}
+              type="button"
+              onClick={handleWishlistClick}
               className="wishlist-btn"
+              aria-label={saved ? "Remove from wishlist" : "Add to wishlist"}
             >
               {saved ? "♥" : "♡"}
             </button>
 
             <Image
-  src={image}
-  className="product-image"
-  alt={title}
-  width={500}
-  height={360}
-  loading="lazy"
-/>
+              src={image}
+              className="product-image"
+              alt={title}
+              width={500}
+              height={400}
+              loading="lazy"
+            />
           </div>
 
           <div className="p-4">
@@ -64,14 +87,8 @@ export default function ProductCard({
           </div>
 
           <button
-            onClick={() =>
-              addToCart({
-                id,
-                title,
-                price,
-                image_url: image,
-              })
-            }
+            type="button"
+            onClick={handleAddToCart}
             className="btn btn-dark w-100 py-3 mb-2"
           >
             Add to Cart

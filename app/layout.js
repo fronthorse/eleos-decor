@@ -40,14 +40,17 @@ export default function RootLayout({ children }) {
     </CartProvider>
   </WishlistProvider>
   <Toaster
-  position="top-right"
+  position="top-center"
   toastOptions={{
-    duration: 3000,
+    duration: 2500,
     style: {
-      background: "#1f1f1f",
-      color: "#fff",
+      background: "#fff",
+      color: "#1f1f1f",
       borderRadius: "14px",
       padding: "14px 18px",
+      boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+      fontSize: "0.95rem",
+      fontWeight: "500",
     },
   }}
 />

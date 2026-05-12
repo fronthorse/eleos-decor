@@ -47,18 +47,31 @@ export default function CustomerSignupPage() {
     setIsSubmitting(true);
     setMessage("Creating account...");
 
-    const { error } = await supabase.auth.signUp({
-  email,
-  password,
-  options: {
-    emailRedirectTo: `${window.location.origin}/auth/callback`,
-  },
-});
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
 
     if (error) {
       setIsSubmitting(false);
 
-      if (error.message.toLowerCase().includes("rate limit")) {
+      const errorMessage = error.message.toLowerCase();
+
+      if (
+        errorMessage.includes("already registered") ||
+        errorMessage.includes("already exists") ||
+        errorMessage.includes("user already")
+      ) {
+        setMessage(
+          "An account already exists with this email. Please login instead."
+        );
+        return;
+      }
+
+      if (errorMessage.includes("rate limit")) {
         setMessage(
           "Too many signup emails have been requested. Please wait a few minutes before trying again."
         );
@@ -66,6 +79,14 @@ export default function CustomerSignupPage() {
       }
 
       setMessage(error.message);
+      return;
+    }
+
+    if (data?.user && data.user.identities?.length === 0) {
+      setIsSubmitting(false);
+      setMessage(
+        "An account already exists with this email. Please login instead."
+      );
       return;
     }
 
@@ -168,6 +189,12 @@ export default function CustomerSignupPage() {
         </p>
 
         {message && <p className="text-muted mt-3">{message}</p>}
+
+        {message.includes("already exists") && (
+          <a href="/customer/login" className="btn btn-outline-dark w-100 mt-2">
+            Go to Login
+          </a>
+        )}
 
         {message.includes("Account created") && (
           <a href="/customer/login" className="btn btn-outline-dark w-100 mt-2">

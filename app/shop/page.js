@@ -22,6 +22,7 @@ function ShopContent() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOption, setSortOption] = useState("newest");
   const [visibleCount, setVisibleCount] = useState(12);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const categories = [
@@ -70,7 +71,7 @@ function ShopContent() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      
+      console.log(error);
       setLoading(false);
       return;
     }
@@ -133,9 +134,9 @@ function ShopContent() {
     <>
       <Navbar />
 
-      <section className="py-5" style={{ marginTop: "100px" }}>
+      <section className="shop-page-section">
         <div className="container">
-          <div className="text-center mb-5">
+          <div className="text-center shop-page-heading">
             <h1 className="fw-bold">Shop Eleos Decor</h1>
 
             <p className="text-muted">
@@ -143,67 +144,88 @@ function ShopContent() {
             </p>
           </div>
 
-          <div className="row g-3 align-items-center mb-4">
-            <div className="col-md-8">
-              <input
-                type="text"
-                className="form-control form-control-lg"
-                placeholder="Search products, categories, descriptions, or prices..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-
-            <div className="col-md-4">
-              <select
-                className="form-select form-select-lg"
-                value={sortOption}
-                onChange={(e) => setSortOption(e.target.value)}
-              >
-                <option value="newest">Newest First</option>
-                <option value="oldest">Oldest First</option>
-                <option value="price-low">Price: Low to High</option>
-                <option value="price-high">Price: High to Low</option>
-              </select>
-            </div>
+          <div className="d-md-none mb-3">
+            <button
+              onClick={() => setFilterOpen(!filterOpen)}
+              className="btn btn-dark w-100"
+            >
+              {filterOpen ? "Hide Search & Filter" : "Search & Filter"}
+            </button>
           </div>
 
-          <div className="row g-3 align-items-center mb-5">
-            <div className="col-md-6">
-              <label className="form-label fw-bold">
-                Filter by Category
-              </label>
+          <div className={`shop-mobile-filter ${filterOpen ? "open" : ""}`}>
+            <div className="row g-3 align-items-center mb-4">
+              <div className="col-md-8">
+                <label className="form-label fw-bold small mb-1 d-md-none">
+                  Search
+                </label>
 
-              <select
-                className="form-select form-select-lg"
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-              >
-                {categories.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-              </select>
+                <input
+                  type="text"
+                  className="form-control form-control-lg"
+                  placeholder="Search products..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              <div className="col-md-4">
+                <label className="form-label fw-bold small mb-1 d-md-none">
+                  Sort
+                </label>
+
+                <select
+                  className="form-select form-select-lg"
+                  value={sortOption}
+                  onChange={(e) => setSortOption(e.target.value)}
+                >
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="price-low">Price: Low to High</option>
+                  <option value="price-high">Price: High to Low</option>
+                </select>
+              </div>
             </div>
 
-            <div className="col-md-6">
-              <label className="form-label fw-bold">
-                Current Selection
-              </label>
+            <div className="shop-filter-card mb-5">
+              <div className="row g-3">
+                <div className="col-md-6">
+                  <label className="form-label fw-bold small mb-1">
+                    Category
+                  </label>
 
-              <div className="bg-white border rounded-pill px-4 py-3">
-                {selectedCategory === "All"
-                  ? "Showing all categories"
-                  : `Showing ${selectedCategory}`}
+                  <select
+                    className="form-select"
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                  >
+                    {categories.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="col-md-6 d-none d-md-block">
+                  <label className="form-label fw-bold small mb-1">
+                    Showing
+                  </label>
+
+                  <div className="bg-white border rounded-pill px-4 py-2 small">
+                    {selectedCategory === "All"
+                      ? "All categories"
+                      : selectedCategory}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
           {!loading && (
             <p className="text-muted mb-4">
-              Showing {visibleProducts.length} of {filteredProducts.length} product
-              {filteredProducts.length === 1 ? "" : "s"}
+              Showing {visibleProducts.length} of {filteredProducts.length}{" "}
+              product{filteredProducts.length === 1 ? "" : "s"}
             </p>
           )}
 
@@ -217,11 +239,11 @@ function ShopContent() {
 
           {!loading && filteredProducts.length === 0 && (
             <EmptyState
-  title="No products found"
-  message="Try another search term, category, or sorting option."
-  actionText="View All Products"
-  actionHref="/shop"
-/>
+              title="No products found"
+              message="Try another search term, category, or sorting option."
+              actionText="View All Products"
+              actionHref="/shop"
+            />
           )}
 
           {!loading && filteredProducts.length > 0 && (

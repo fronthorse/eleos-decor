@@ -5,6 +5,7 @@ import { useCart } from "../../context/CartContext";
 import { createClient } from "../../lib/supabase/client";
 import MiniCartDrawer from "./MiniCartDrawer";
 import { useRouter } from "next/navigation";
+import { FiShoppingBag } from "react-icons/fi";
 
 export default function Navbar() {
   const supabase = createClient();
@@ -55,11 +56,18 @@ const router = useRouter();
 
           <div className="d-flex align-items-center gap-2 order-lg-2">
             <button
-              onClick={() => setCartOpen(true)}
-              className="btn btn-sm btn-outline-dark cart-nav-btn"
-            >
-              Cart ({cartCount})
-            </button>
+  onClick={() => setCartOpen(true)}
+  className="cart-icon-btn"
+  aria-label="Open cart"
+>
+  <FiShoppingBag />
+
+  {cartCount > 0 && (
+    <span className="cart-count-badge">
+      {cartCount}
+    </span>
+  )}
+</button>
 
             <button
               className="navbar-toggler"

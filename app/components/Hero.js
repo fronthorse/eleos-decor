@@ -1,46 +1,25 @@
 export default function Hero() {
   return (
-    <section className="hero-section d-flex align-items-center text-white">
+    <section className="hero-section d-flex align-items-center">
       <div className="container">
-        <div className="col-lg-7">
-          <p className="section-label text-white mb-3">
-            Warm Luxury For Every Space
-          </p>
+        <div className="row">
+          <div className="col-lg-7">
+            <p className="section-label text-white mb-3">
+              Eleos Decor
+            </p>
 
-          <h1 className="hero-title mb-4">
-            Transform Your Home & Office With Elegant Decor
-          </h1>
+            <h1 className="hero-title">
+              Beautiful Décor for Warm, Elegant Spaces
+            </h1>
 
-          <p className="hero-text mb-4">
-            Quality and affordable interior decoration pieces carefully selected
-            to make your space feel warm, stylish, and welcoming.
-          </p>
+            <p className="hero-text mt-3">
+              Curated home and office décor pieces designed to add comfort,
+              style, and personality to your space.
+            </p>
 
-          <div className="d-flex flex-wrap gap-3 pb-4">
-            <a href="/shop" className="btn btn-light btn-lg">
+            <a href="/shop" className="btn btn-light hero-btn mt-4">
               Shop Collection
             </a>
-
-            <a href="/contact" className="btn btn-outline-light btn-lg">
-              Talk to Us
-            </a>
-          </div>
-
-          <div className="d-flex flex-wrap gap-4 mt-4">
-            <div>
-              <h4 className="fw-bold mb-0">Nationwide</h4>
-              <small>Delivery across Nigeria</small>
-            </div>
-
-            <div>
-              <h4 className="fw-bold mb-0">Home & Office</h4>
-              <small>Decor solutions</small>
-            </div>
-
-            <div>
-              <h4 className="fw-bold mb-0">Warm Luxury</h4>
-              <small>Affordable elegance</small>
-            </div>
           </div>
         </div>
       </div>
