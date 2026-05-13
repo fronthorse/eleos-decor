@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { createClient } from "../../../lib/supabase/client";
 
 export default function CustomerSignupPage() {
@@ -106,6 +107,10 @@ export default function CustomerSignupPage() {
       className="container py-5"
       style={{ maxWidth: "520px", marginTop: "90px" }}
     >
+      <Link href="/" className="auth-back-link">
+        Back to Home
+      </Link>
+
       <h1 className="fw-bold mb-2">Create Account</h1>
 
       <p className="text-muted mb-4">

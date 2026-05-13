@@ -11,6 +11,29 @@ export function WishlistProvider({ children }) {
   const [wishlistIds, setWishlistIds] = useState([]);
   const [user, setUser] = useState(null);
 
+  async function fetchWishlist(userId) {
+    const { data, error } = await supabase
+      .from("wishlist_items")
+      .select("product_id")
+      .eq("user_id", userId);
+
+    if (!error) {
+      setWishlistIds(data.map((item) => item.product_id));
+    }
+  }
+
+  async function checkUser() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    setUser(session?.user || null);
+
+    if (session?.user) {
+      fetchWishlist(session.user.id);
+    }
+  }
+
   useEffect(() => {
     checkUser();
 
@@ -28,29 +51,6 @@ export function WishlistProvider({ children }) {
 
     return () => subscription.unsubscribe();
   }, []);
-
-  async function checkUser() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    setUser(session?.user || null);
-
-    if (session?.user) {
-      fetchWishlist(session.user.id);
-    }
-  }
-
-  async function fetchWishlist(userId) {
-    const { data, error } = await supabase
-      .from("wishlist_items")
-      .select("product_id")
-      .eq("user_id", userId);
-
-    if (!error) {
-      setWishlistIds(data.map((item) => item.product_id));
-    }
-  }
 
   async function toggleWishlist(productId) {
     if (!user) {

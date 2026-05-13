@@ -6,6 +6,10 @@ import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
 import imageCompression from "browser-image-compression";
 
+function createSafeFileName(fileName) {
+  return `${Date.now()}-${fileName.replaceAll(" ", "-")}`;
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -39,10 +43,6 @@ export default function AdminPage() {
   const [imageFiles, setImageFiles] = useState([]);
   const [editingProductId, setEditingProductId] = useState(null);
 
-  useEffect(() => {
-    checkUserSession();
-  }, []);
-
   async function checkUserSession() {
     const {
       data: { session },
@@ -59,6 +59,10 @@ export default function AdminPage() {
     fetchInquiries();
     setCheckingAuth(false);
   }
+
+  useEffect(() => {
+    checkUserSession();
+  }, []);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -174,10 +178,7 @@ export default function AdminPage() {
         useWebWorker: true,
       });
 
-      const safeFileName = `${Date.now()}-${compressedFile.name.replaceAll(
-        " ",
-        "-"
-      )}`;
+      const safeFileName = createSafeFileName(compressedFile.name);
 
       const { error: uploadError } = await supabase.storage
         .from("products")

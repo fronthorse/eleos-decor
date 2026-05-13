@@ -27,10 +27,6 @@ export default function CheckoutForm({ cartItems, cartTotal, compact = false }) 
 
   const whatsappNumber = "2348168350533";
 
-  useEffect(() => {
-    checkUser();
-  }, []);
-
   async function checkUser() {
     const {
       data: { session },
@@ -59,6 +55,10 @@ export default function CheckoutForm({ cartItems, cartTotal, compact = false }) 
     setCustomerPhone(data?.phone || "");
     setDeliveryAddress(data?.delivery_address || "");
   }
+
+  useEffect(() => {
+    checkUser();
+  }, []);
 
   async function handleCheckout() {
     if (cartItems.length === 0) {

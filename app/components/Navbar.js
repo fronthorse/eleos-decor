@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useCart } from "../../context/CartContext";
 import { createClient } from "../../lib/supabase/client";
 import MiniCartDrawer from "./MiniCartDrawer";
@@ -14,6 +15,14 @@ const router = useRouter();
   const [cartOpen, setCartOpen] = useState(false);
   const [user, setUser] = useState(null);
 
+  async function checkUser() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    setUser(session?.user || null);
+  }
+
   useEffect(() => {
     checkUser();
 
@@ -25,14 +34,6 @@ const router = useRouter();
 
     return () => subscription.unsubscribe();
   }, []);
-
-  async function checkUser() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    setUser(session?.user || null);
-  }
 
   async function handleLogout() {
   await supabase.auth.signOut();
@@ -50,9 +51,9 @@ const router = useRouter();
     <>
       <nav className="navbar navbar-expand-lg bg-white fixed-top minimal-navbar">
         <div className="container">
-          <a className="navbar-brand fw-bold" href="/">
+          <Link className="navbar-brand fw-bold" href="/">
             Eleos Decor
-          </a>
+          </Link>
 
           <div className="d-flex align-items-center gap-2 order-lg-2">
             <button
@@ -85,9 +86,9 @@ const router = useRouter();
           <div className="collapse navbar-collapse order-lg-1" id="navbarNav">
             <ul className="navbar-nav ms-lg-auto align-items-lg-center gap-lg-3 mt-3 mt-lg-0">
               <li className="nav-item">
-                <a className="nav-link" href="/">
+                <Link className="nav-link" href="/">
                   Home
-                </a>
+                </Link>
               </li>
 
               <li className="nav-item">

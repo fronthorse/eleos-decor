@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
 
@@ -66,6 +67,10 @@ async function handleGoogleLogin() {
 
   return (
     <div className="container py-5" style={{ maxWidth: "520px", marginTop: "90px" }}>
+      <Link href="/" className="auth-back-link">
+        Back to Home
+      </Link>
+
       <h1 className="fw-bold mb-2">Customer Login</h1>
 
       <p className="text-muted mb-4">

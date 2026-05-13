@@ -50,20 +50,6 @@ function ShopContent() {
     "Artificial Water Fountains",
   ];
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
-
-  useEffect(() => {
-    if (categoryFromUrl) {
-      setSelectedCategory(categoryFromUrl);
-    }
-  }, [categoryFromUrl]);
-
-  useEffect(() => {
-    setVisibleCount(12);
-  }, [selectedCategory, searchTerm, sortOption]);
-
   async function fetchProducts() {
     const { data, error } = await supabase
       .from("products")
@@ -79,6 +65,20 @@ function ShopContent() {
     setProducts(data || []);
     setLoading(false);
   }
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  useEffect(() => {
+    if (categoryFromUrl) {
+      setSelectedCategory(categoryFromUrl);
+    }
+  }, [categoryFromUrl]);
+
+  useEffect(() => {
+    setVisibleCount(12);
+  }, [selectedCategory, searchTerm, sortOption]);
 
   function getNumericPrice(price) {
     return Number(

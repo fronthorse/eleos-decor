@@ -10,10 +10,6 @@ export default function FeaturedProducts() {
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchFeaturedProducts();
-  }, []);
-
   async function fetchFeaturedProducts() {
     const { data, error } = await supabase
       .from("products")
@@ -30,6 +26,10 @@ export default function FeaturedProducts() {
     setFeaturedProducts(data);
     setLoading(false);
   }
+
+  useEffect(() => {
+    fetchFeaturedProducts();
+  }, []);
 
   return (
     <section className="py-5" data-aos="fade-up">

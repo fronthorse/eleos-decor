@@ -7,10 +7,6 @@ export default function Testimonials() {
   const [reviews, setReviews] = useState([]);
   const supabase = createClient();
 
-  useEffect(() => {
-    fetchReviews();
-  }, []);
-
   async function fetchReviews() {
     const { data, error } = await supabase
       .from("reviews")
@@ -23,6 +19,10 @@ export default function Testimonials() {
       setReviews(data || []);
     }
   }
+
+  useEffect(() => {
+    fetchReviews();
+  }, []);
 
   if (reviews.length === 0) return null;
 

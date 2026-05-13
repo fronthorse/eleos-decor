@@ -14,7 +14,7 @@ export default function CustomerDashboardPage() {
   const supabase = createClient();
 
   const { cartItems } = useCart();
-  const { wishlist } = useWishlist();
+  const { wishlistIds } = useWishlist();
 
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -26,28 +26,6 @@ export default function CustomerDashboardPage() {
   const [orders, setOrders] = useState([]);
   const [message, setMessage] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
-
-  useEffect(() => {
-    checkUser();
-  }, []);
-
-  async function checkUser() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session?.user) {
-      router.push("/customer/login");
-      return;
-    }
-
-    setUser(session.user);
-
-    await fetchProfile(session.user.id);
-    await fetchOrders(session.user.id);
-
-    setCheckingAuth(false);
-  }
 
   async function fetchProfile(userId) {
     const { data, error } = await supabase
@@ -80,6 +58,28 @@ export default function CustomerDashboardPage() {
 
     setOrders(data || []);
   }
+
+  async function checkUser() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+      router.push("/customer/login");
+      return;
+    }
+
+    setUser(session.user);
+
+    await fetchProfile(session.user.id);
+    await fetchOrders(session.user.id);
+
+    setCheckingAuth(false);
+  }
+
+  useEffect(() => {
+    checkUser();
+  }, []);
 
   async function handleSaveProfile(e) {
     e.preventDefault();
@@ -211,7 +211,7 @@ export default function CustomerDashboardPage() {
               <div className="col-md-6">
                 <div className="soft-card p-4 text-center">
                   <h2 className="fw-bold gold-text">
-                    {wishlist?.length || 0}
+                    {wishlistIds?.length || 0}
                   </h2>
                   <p className="text-muted mb-0">Wishlist Items</p>
                 </div>
@@ -224,7 +224,7 @@ export default function CustomerDashboardPage() {
               {orders.length === 0 ? (
                 <EmptyState
                   title="No orders yet"
-                  text="Your checkout orders will appear here after you place an order."
+                  message="Your checkout orders will appear here after you place an order."
                 />
               ) : (
                 <div className="table-responsive">
