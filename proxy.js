@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
+import { isAdminEmail } from "./lib/adminAuth";
 
 export async function proxy(request) {
   let response = NextResponse.next({
@@ -36,6 +37,10 @@ if (isAdminRoute && !session) {
   return NextResponse.redirect(
     new URL("/admin/login", request.url)
   );
+}
+
+if (isAdminRoute && !isAdminEmail(session.user.email)) {
+  return NextResponse.redirect(new URL("/customer/login", request.url));
 }
 
   return response;

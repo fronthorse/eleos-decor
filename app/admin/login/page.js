@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
+import { isAdminEmail } from "../../../lib/adminAuth";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -16,13 +17,19 @@ export default function AdminLoginPage() {
     e.preventDefault();
     setMessage("Logging in...");
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) {
       setMessage(error.message);
+      return;
+    }
+
+    if (!isAdminEmail(data.user?.email)) {
+      await supabase.auth.signOut();
+      setMessage("You are not authorized to access the admin portal.");
       return;
     }
 

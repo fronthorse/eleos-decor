@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
+import { isAdminEmail } from "../../lib/adminAuth";
 import imageCompression from "browser-image-compression";
 
 function createSafeFileName(fileName) {
@@ -50,6 +51,14 @@ export default function AdminPage() {
 
     if (!session) {
       router.push("/admin/login");
+      return;
+    }
+
+    if (!isAdminEmail(session.user.email)) {
+      await supabase.auth.signOut();
+      toast.error("You are not authorized to access the admin portal.");
+      router.push("/customer/login");
+      router.refresh();
       return;
     }
 
