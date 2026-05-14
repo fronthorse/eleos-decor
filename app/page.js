@@ -5,6 +5,7 @@ import FeaturedProducts from "./components/FeaturedProducts";
 import TrustSection from "./components/TrustSection";
 import Footer from "./components/Footer";
 import Testimonials from "./components/Testimonials";
+import SocialMediaSection from "./components/SocialMediaSection";
 
 export default function Home() {
   return (
@@ -35,6 +36,7 @@ export default function Home() {
       <FeaturedProducts />
       <TrustSection />
       <Testimonials />
+      <SocialMediaSection />
       <Footer />
     </>
   );

@@ -27,13 +27,14 @@ export async function proxy(request) {
 
   const {
     data: { session },
+    error: sessionError,
   } = await supabase.auth.getSession();
 
   const isAdminRoute =
   request.nextUrl.pathname.startsWith("/admin") &&
   request.nextUrl.pathname !== "/admin/login";
 
-if (isAdminRoute && !session) {
+if (isAdminRoute && (!session || sessionError)) {
   return NextResponse.redirect(
     new URL("/admin/login", request.url)
   );

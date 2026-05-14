@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
+import { getSessionSafely } from "../../lib/supabase/auth";
 import { useCart } from "../../context/CartContext";
 
 function generateOrderNumber() {
@@ -28,9 +29,7 @@ export default function CheckoutForm({ cartItems, cartTotal, compact = false }) 
   const whatsappNumber = "2348168350533";
 
   async function checkUser() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { session } = await getSessionSafely(supabase);
 
     if (!session?.user) {
       setUser(null);

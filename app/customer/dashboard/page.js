@@ -6,6 +6,7 @@ import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 import EmptyState from "../../components/EmptyState";
 import { createClient } from "../../../lib/supabase/client";
+import { getSessionSafely } from "../../../lib/supabase/auth";
 import { useCart } from "../../../context/CartContext";
 import { useWishlist } from "../../../context/WishlistContext";
 
@@ -60,9 +61,7 @@ export default function CustomerDashboardPage() {
   }
 
   async function checkUser() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { session } = await getSessionSafely(supabase);
 
     if (!session?.user) {
       router.push("/customer/login");

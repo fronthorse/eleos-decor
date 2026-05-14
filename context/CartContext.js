@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { createClient } from "../lib/supabase/client";
+import { getSessionSafely } from "../lib/supabase/auth";
 
 const CartContext = createContext();
 
@@ -41,9 +42,7 @@ const [cartLoaded, setCartLoaded] = useState(false);
 }, [cartItems, user, cartLoaded]);
 useEffect(() => {
   async function getUser() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { session } = await getSessionSafely(supabase);
 
     setUser(session?.user || null);
   }
@@ -120,9 +119,7 @@ useEffect(() => {
   }
 
   async function saveCartToAccount() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { session } = await getSessionSafely(supabase);
 
     if (!session) {
       return {
@@ -156,9 +153,7 @@ useEffect(() => {
   }
 
   async function loadCartFromAccount() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { session } = await getSessionSafely(supabase);
 
     if (!session) {
       return {

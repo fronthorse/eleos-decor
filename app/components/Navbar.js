@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useCart } from "../../context/CartContext";
 import { createClient } from "../../lib/supabase/client";
+import { getSessionSafely } from "../../lib/supabase/auth";
 import MiniCartDrawer from "./MiniCartDrawer";
 import { useRouter } from "next/navigation";
 import { FiShoppingBag } from "react-icons/fi";
@@ -16,9 +17,7 @@ const router = useRouter();
   const [user, setUser] = useState(null);
 
   async function checkUser() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { session } = await getSessionSafely(supabase);
 
     setUser(session?.user || null);
   }

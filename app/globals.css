@@ -1313,3 +1313,112 @@ body {
 .auth-back-link:hover {
   color: var(--eleos-gold);
 }
+
+.social-section {
+  padding: 72px 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(250, 247, 242, 0.96)),
+    #faf7f2;
+}
+
+.social-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.95fr);
+  gap: 32px;
+  align-items: center;
+  background: #fff;
+  border: 1px solid rgba(31, 31, 31, 0.06);
+  border-radius: 28px;
+  padding: 38px;
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.055);
+}
+
+.social-copy {
+  max-width: 560px;
+}
+
+.social-links-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.social-link-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 150px;
+  padding: 20px;
+  color: #1f1f1f;
+  background: #faf7f2;
+  border: 1px solid rgba(31, 31, 31, 0.06);
+  border-radius: 22px;
+  transition: transform 0.28s ease, box-shadow 0.28s ease,
+    background-color 0.28s ease;
+}
+
+.social-link-card:hover {
+  color: #1f1f1f;
+  background: #fff;
+  transform: translateY(-5px);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.08);
+}
+
+.social-icon {
+  width: 46px;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: #1f1f1f;
+  border-radius: 50%;
+  font-size: 1.3rem;
+}
+
+.social-link-card strong,
+.social-link-card small {
+  display: block;
+}
+
+.social-link-card strong {
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.social-link-card small {
+  color: #6f6f6f;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 992px) {
+  .social-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .social-section {
+    padding: 54px 0;
+  }
+
+  .social-panel {
+    padding: 26px;
+    border-radius: 24px;
+  }
+
+  .social-copy {
+    text-align: center;
+    margin: 0 auto;
+  }
+
+  .social-links-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .social-link-card {
+    min-height: auto;
+    flex-direction: row;
+    align-items: center;
+  }
+}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
 import { isAdminEmail } from "../../lib/adminAuth";
+import { getSessionSafely } from "../../lib/supabase/auth";
 import imageCompression from "browser-image-compression";
 
 function createSafeFileName(fileName) {
@@ -45,11 +46,13 @@ export default function AdminPage() {
   const [editingProductId, setEditingProductId] = useState(null);
 
   async function checkUserSession() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { session, error } = await getSessionSafely(supabase);
 
     if (!session) {
+      if (error) {
+        toast.error("Your session expired. Please log in again.");
+      }
+
       router.push("/admin/login");
       return;
     }

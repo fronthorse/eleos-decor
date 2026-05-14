@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { createClient } from "../lib/supabase/client";
+import { getSessionSafely } from "../lib/supabase/auth";
 
 const WishlistContext = createContext();
 
@@ -23,9 +24,7 @@ export function WishlistProvider({ children }) {
   }
 
   async function checkUser() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { session } = await getSessionSafely(supabase);
 
     setUser(session?.user || null);
 
