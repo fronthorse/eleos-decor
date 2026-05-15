@@ -484,6 +484,17 @@ body {
   align-items: flex-end;
   gap: 14px;
   pointer-events: none;
+  touch-action: none;
+  user-select: none;
+}
+
+.ai-assistant-widget.positioned {
+  right: auto;
+  bottom: auto;
+}
+
+.ai-assistant-widget.dragging {
+  transition: none;
 }
 
 .ai-assistant-toggle,
@@ -492,6 +503,7 @@ body {
 }
 
 .ai-assistant-toggle {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -499,11 +511,14 @@ body {
   color: #fff;
   background: #1f1f1f;
   border-radius: 999px;
-  padding: 13px 18px;
+  padding: 12px 17px;
   font-weight: 800;
   box-shadow: 0 16px 38px rgba(31, 31, 31, 0.2);
   transition: transform 0.28s ease, box-shadow 0.28s ease,
     background-color 0.28s ease;
+  cursor: grab;
+  touch-action: none;
+  overflow: visible;
 }
 
 .ai-assistant-toggle:hover {
@@ -513,15 +528,78 @@ body {
 }
 
 .ai-assistant-toggle-icon {
-  width: 30px;
-  height: 30px;
+  width: 27px;
+  height: 27px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: #1f1f1f;
   background: #f6ead8;
   border-radius: 50%;
-  font-size: 1rem;
+  font-size: 0.94rem;
+}
+
+.ai-assistant-widget.collapsed .ai-assistant-toggle {
+  width: 50px;
+  height: 50px;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+  box-shadow: 0 14px 32px rgba(31, 31, 31, 0.22);
+}
+
+.ai-assistant-widget.collapsed .ai-assistant-toggle-text {
+  display: none;
+}
+
+.ai-assistant-tooltip {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  max-width: min(220px, calc(100vw - 92px));
+  padding: 9px 13px;
+  border: 1px solid rgba(184, 149, 95, 0.2);
+  border-radius: 999px;
+  color: #2c241a;
+  background: rgba(255, 252, 247, 0.98);
+  box-shadow: 0 12px 30px rgba(31, 31, 31, 0.12);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-50%) translateX(6px);
+  transition: opacity 0.28s ease, transform 0.28s ease,
+    visibility 0.28s ease;
+}
+
+.ai-assistant-widget.tip-left .ai-assistant-tooltip {
+  right: calc(100% + 12px);
+}
+
+.ai-assistant-widget.tip-right .ai-assistant-tooltip {
+  left: calc(100% + 12px);
+  transform: translateY(-50%) translateX(-6px);
+}
+
+.ai-assistant-widget.show-tip .ai-assistant-tooltip,
+.ai-assistant-toggle:hover .ai-assistant-tooltip,
+.ai-assistant-toggle:focus-visible .ai-assistant-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%) translateX(0);
+}
+
+.ai-assistant-widget.dragging .ai-assistant-tooltip {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.ai-assistant-widget.dragging .ai-assistant-toggle,
+.ai-assistant-widget.dragging .ai-assistant-header {
+  cursor: grabbing;
 }
 
 .ai-assistant-panel {
@@ -542,6 +620,10 @@ body {
     visibility 0.28s ease;
 }
 
+.ai-assistant-panel:not(.open) {
+  display: none;
+}
+
 .ai-assistant-panel.open {
   opacity: 1;
   transform: translateY(0) scale(1);
@@ -557,6 +639,8 @@ body {
   background:
     linear-gradient(135deg, rgba(31, 31, 31, 0.96), rgba(63, 51, 35, 0.94)),
     #1f1f1f;
+  cursor: grab;
+  touch-action: none;
 }
 
 .ai-assistant-kicker {
@@ -933,25 +1017,40 @@ body {
   .whatsapp-float {
     right: 16px;
     bottom: 18px;
-    padding: 12px 18px;
-    font-size: 0.9rem;
+    padding: 11px 16px;
+    font-size: 0.86rem;
   }
 
   .ai-assistant-widget {
     right: 16px;
-    bottom: 70px;
-    left: 16px;
+    bottom: 92px;
     align-items: flex-end;
+  }
+
+  .ai-assistant-widget.positioned {
+    right: auto;
+    bottom: auto;
   }
 
   .ai-assistant-toggle {
     max-width: 100%;
-    padding: 11px 14px;
-    font-size: 0.9rem;
+    padding: 10px 13px;
+    font-size: 0.86rem;
+  }
+
+  .ai-assistant-widget.collapsed .ai-assistant-toggle {
+    width: 50px;
+    height: 50px;
+  }
+
+  .ai-assistant-tooltip {
+    max-width: min(210px, calc(100vw - 82px));
+    padding: 8px 12px;
+    font-size: 0.74rem;
   }
 
   .ai-assistant-panel {
-    width: 100%;
+    width: min(360px, calc(100vw - 24px));
     height: min(520px, calc(100dvh - 150px));
     min-height: min(410px, calc(100dvh - 150px));
     border-radius: 20px;

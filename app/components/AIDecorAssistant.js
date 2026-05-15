@@ -82,6 +82,17 @@ const welcomeMessage = {
   text: "Hi, I'm your Eleos Decor assistant. I can help you find decor pieces, suggest styling ideas, explain delivery, or guide you to place an order.",
 };
 
+const DESKTOP_SAFE_TOP = 88;
+const MOBILE_SAFE_TOP = 76;
+const DESKTOP_GAP = 24;
+const MOBILE_GAP = 16;
+const DESKTOP_TOGGLE_SIZE = 50;
+const MOBILE_TOGGLE_SIZE = 50;
+const DEFAULT_WHATSAPP_CLEARANCE = 102;
+const MOBILE_WHATSAPP_CLEARANCE = 96;
+const FIRST_VISIT_TIP_KEY = "eleos_ai_assistant_tip_seen";
+const TIP_DISPLAY_DURATION = 4200;
+
 function handleProductImageError(event) {
   if (event.currentTarget.src.includes(PRODUCT_IMAGE_FALLBACK)) {
     return;
@@ -1086,7 +1097,13 @@ export default function AIDecorAssistant() {
   const [messages, setMessages] = useState([welcomeMessage]);
   const [assistantMemory, setAssistantMemory] = useState(initialAssistantMemory);
   const [isThinking, setIsThinking] = useState(false);
+  const [position, setPosition] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [showAutoTip, setShowAutoTip] = useState(false);
   const messagesRef = useRef(null);
+  const widgetRef = useRef(null);
+  const dragStateRef = useRef(null);
+  const suppressToggleClickRef = useRef(false);
 
   const panelTitleId = useMemo(() => "eleos-ai-assistant-title", []);
   const defaultMessages = useMemo(() => [welcomeMessage], []);
@@ -1108,6 +1125,127 @@ export default function AIDecorAssistant() {
 
     messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
   }, [messages, isOpen]);
+
+  function getViewportSettings() {
+    const isMobile = window.innerWidth <= 576;
+
+    return {
+      gap: isMobile ? MOBILE_GAP : DESKTOP_GAP,
+      safeTop: isMobile ? MOBILE_SAFE_TOP : DESKTOP_SAFE_TOP,
+      toggleSize: isMobile ? MOBILE_TOGGLE_SIZE : DESKTOP_TOGGLE_SIZE,
+      bottomClearance: isMobile
+        ? MOBILE_WHATSAPP_CLEARANCE
+        : DEFAULT_WHATSAPP_CLEARANCE,
+    };
+  }
+
+  function doRectsOverlap(rectA, rectB) {
+    return (
+      rectA.left < rectB.right &&
+      rectA.right > rectB.left &&
+      rectA.top < rectB.bottom &&
+      rectA.bottom > rectB.top
+    );
+  }
+
+  function clampWidgetPosition(nextPosition, rect) {
+    const { gap, safeTop, toggleSize } = getViewportSettings();
+    const width = rect?.width || toggleSize;
+    const height = rect?.height || toggleSize;
+    const maxX = Math.max(gap, window.innerWidth - width - gap);
+    const maxY = Math.max(safeTop, window.innerHeight - height - gap);
+    const clampedPosition = {
+      x: Math.min(Math.max(nextPosition.x, gap), maxX),
+      y: Math.min(Math.max(nextPosition.y, safeTop), maxY),
+    };
+    const whatsappRect = document
+      .querySelector(".whatsapp-float")
+      ?.getBoundingClientRect();
+
+    if (!whatsappRect) {
+      return clampedPosition;
+    }
+
+    const nextRect = {
+      left: clampedPosition.x,
+      top: clampedPosition.y,
+      right: clampedPosition.x + width,
+      bottom: clampedPosition.y + height,
+    };
+
+    if (!doRectsOverlap(nextRect, whatsappRect)) {
+      return clampedPosition;
+    }
+
+    return {
+      x: clampedPosition.x,
+      y: Math.max(safeTop, whatsappRect.top - height - gap),
+    };
+  }
+
+  function getDefaultWidgetPosition(rect) {
+    const { gap, bottomClearance, toggleSize } = getViewportSettings();
+    const width = rect?.width || toggleSize;
+    const height = rect?.height || toggleSize;
+
+    return clampWidgetPosition(
+      {
+        x: window.innerWidth - width - gap,
+        y: window.innerHeight - height - bottomClearance,
+      },
+      rect
+    );
+  }
+
+  useEffect(() => {
+    function syncPositionToViewport() {
+      if (!widgetRef.current) {
+        return;
+      }
+
+      const rect = widgetRef.current.getBoundingClientRect();
+
+      setPosition((currentPosition) =>
+        currentPosition
+          ? clampWidgetPosition(currentPosition, rect)
+          : getDefaultWidgetPosition(rect)
+      );
+    }
+
+    const frame = window.requestAnimationFrame(syncPositionToViewport);
+    window.addEventListener("resize", syncPositionToViewport);
+    window.addEventListener("orientationchange", syncPositionToViewport);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", syncPositionToViewport);
+      window.removeEventListener("orientationchange", syncPositionToViewport);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen || typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      if (window.sessionStorage.getItem(FIRST_VISIT_TIP_KEY) === "true") {
+        return;
+      }
+
+      window.sessionStorage.setItem(FIRST_VISIT_TIP_KEY, "true");
+    } catch (error) {
+      console.warn("Unable to store AI assistant tooltip preference.", error);
+    }
+
+    setShowAutoTip(true);
+
+    const timer = window.setTimeout(() => {
+      setShowAutoTip(false);
+    }, TIP_DISPLAY_DURATION);
+
+    return () => window.clearTimeout(timer);
+  }, [isOpen]);
 
   async function buildAssistantReply(trimmedValue) {
     const extractedPreferences = extractPreferencesFromText(trimmedValue);
@@ -1265,15 +1403,125 @@ export default function AIDecorAssistant() {
     sendMessage(action);
   }
 
+  function startWidgetDrag(event) {
+    setShowAutoTip(false);
+
+    if (event.button && event.button !== 0) {
+      return;
+    }
+
+    const isToggleHandle = event.currentTarget.classList.contains(
+      "ai-assistant-toggle"
+    );
+
+    if (
+      !isToggleHandle &&
+      event.target.closest("button, a, input, textarea, select")
+    ) {
+      return;
+    }
+
+    const rect = widgetRef.current?.getBoundingClientRect();
+
+    if (!rect) {
+      return;
+    }
+
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: rect.left,
+      originY: rect.top,
+      moved: false,
+    };
+    setIsDragging(true);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function moveWidget(event) {
+    const dragState = dragStateRef.current;
+
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - dragState.startX;
+    const deltaY = event.clientY - dragState.startY;
+
+    if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
+      dragState.moved = true;
+    }
+
+    setPosition(
+      clampWidgetPosition(
+        {
+          x: dragState.originX + deltaX,
+          y: dragState.originY + deltaY,
+        },
+        widgetRef.current?.getBoundingClientRect()
+      )
+    );
+  }
+
+  function stopWidgetDrag(event) {
+    const dragState = dragStateRef.current;
+
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    suppressToggleClickRef.current = dragState.moved;
+    dragStateRef.current = null;
+    setIsDragging(false);
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+
+    if (suppressToggleClickRef.current) {
+      window.setTimeout(() => {
+        suppressToggleClickRef.current = false;
+      }, 0);
+    }
+  }
+
+  function toggleAssistant() {
+    if (suppressToggleClickRef.current) {
+      return;
+    }
+
+    setShowAutoTip(false);
+    setIsOpen((current) => !current);
+  }
+
   return (
-    <div className="ai-assistant-widget">
+    <div
+      className={`ai-assistant-widget ${isOpen ? "open" : "collapsed"} ${
+        position ? "positioned" : ""
+      } ${isDragging ? "dragging" : ""} ${
+        showAutoTip && !isOpen ? "show-tip" : ""
+      } ${position?.x < 190 ? "tip-right" : "tip-left"}`}
+      ref={widgetRef}
+      style={
+        position
+          ? {
+              left: `${position.x}px`,
+              top: `${position.y}px`,
+            }
+          : undefined
+      }
+    >
       <div
         className={`ai-assistant-panel ${isOpen ? "open" : ""}`}
         role="dialog"
         aria-modal="false"
         aria-labelledby={panelTitleId}
       >
-        <div className="ai-assistant-header">
+        <div
+          className="ai-assistant-header"
+          onPointerDown={startWidgetDrag}
+          onPointerMove={moveWidget}
+          onPointerUp={stopWidgetDrag}
+          onPointerCancel={stopWidgetDrag}
+        >
           <div>
             <span className="ai-assistant-kicker">Eleos Decor</span>
             <h2 id={panelTitleId}>Eleos Decor Assistant</h2>
@@ -1436,14 +1684,25 @@ export default function AIDecorAssistant() {
       <button
         type="button"
         className="ai-assistant-toggle"
-        onClick={() => setIsOpen((current) => !current)}
+        onPointerDown={startWidgetDrag}
+        onPointerMove={moveWidget}
+        onPointerUp={stopWidgetDrag}
+        onPointerCancel={stopWidgetDrag}
+        onClick={toggleAssistant}
         aria-expanded={isOpen}
         aria-controls={panelTitleId}
+        aria-label={isOpen ? "Collapse decor assistant" : "Open decor assistant"}
+        title={isOpen ? "Collapse assistant" : "Open assistant"}
       >
         <span className="ai-assistant-toggle-icon">
           <BsStars />
         </span>
-        <span>Ask Decor Assistant</span>
+        <span className="ai-assistant-toggle-text">Ask Decor Assistant</span>
+        {!isOpen && (
+          <span className="ai-assistant-tooltip" role="tooltip">
+            Need decor help?
+          </span>
+        )}
       </button>
     </div>
   );
