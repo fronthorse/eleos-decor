@@ -50,6 +50,14 @@ Target audience:
 
 ## Deployment
 - Vercel
+- Final production domain: https://eleosdecor.com
+- Domain was purchased from WhoGoHost
+- Domain is connected to Vercel
+- DNS is configured for Vercel
+- Primary domain: eleosdecor.com
+- Canonical production URL: https://eleosdecor.com
+- NEXT_PUBLIC_SITE_URL is set to https://eleosdecor.com
+- Google OAuth works on the production domain
 
 ## Version Control
 - GitHub
@@ -85,6 +93,7 @@ Reusable UI components such as:
 ### lib/
 Contains:
 - supabase client helpers under lib/supabase/
+- seo.js for production domain constants, shared SEO descriptions, OG image fallback, product image/price helpers, and schema availability helpers
 - productSearch.js
 - productImages.js
 - orderStatuses.js
@@ -105,6 +114,21 @@ Contains React Context providers such as:
 
 # CURRENT FEATURES
 
+## Production Domain
+- Final production domain is https://eleosdecor.com
+- Domain was purchased from WhoGoHost and connected to Vercel
+- DNS is configured for Vercel production hosting
+- Google OAuth works on the production domain
+- NEXT_PUBLIC_SITE_URL is set to https://eleosdecor.com
+- Treat https://eleosdecor.com as the canonical public URL for metadata, sitemap, robots, auth redirects, and future integrations
+
+## Branding
+- Eleos Decor logo has been cleaned/rebuilt for future brand use
+- Logo assets are intended for Google OAuth branding, favicon, Open Graph image, social profiles, email branding, and general brand presentation
+- Default social sharing fallback image is public/eleos-og-image.png, with SVG source at public/eleos-og-image.svg
+- Navbar uses the dedicated transparent logo asset public/eleos-logo-nav.svg so the header stays visually clean
+- Website branding should remain premium, warm, elegant, minimal, and welcoming
+
 ## Store Features
 - Responsive homepage
 - Shop page with Supabase-side pagination, filtering, full-text search, and sorting
@@ -120,17 +144,88 @@ Contains React Context providers such as:
 - Product detail/gallery images use Next Image optimization with priority main image, responsive sizes, skeleton loading, and fallback image handling
 - Product cards use Next Image and smaller Supabase transformed image URLs for thumbnails when available; product detail images remain high quality
 
+## Production SEO
+- SEO is implemented for the live domain https://eleosdecor.com using Next.js App Router metadata APIs
+- app/layout.js defines global metadataBase set to https://eleosdecor.com, title template, default description, keyword defaults, Open Graph defaults, Twitter/X card defaults, and index/follow defaults
+- Public page metadata/canonicals exist for homepage, shop, about, and contact
+- Product detail pages generate dynamic metadata from Supabase products using products.title, description, image_url/gallery fallback, price, and availability
+- Product detail pages include product canonical URLs and product Open Graph images
+- Product detail pages include Product JSON-LD with name, description, image, brand Eleos Decor, offer priceCurrency NGN, price when available, availability, and canonical URL
+- Product prices may be stored as formatted strings such as "500,000"; SEO helpers normalize them for metadata/schema without changing UI display
+- app/sitemap.js generates sitemap.xml with homepage, shop, about, contact, category query URLs from product categories, and product detail URLs from Supabase
+- Sitemap generation uses public Supabase anon access and products fields id, category, and created_at; products.updated_at is not currently part of the table
+- app/robots.js generates a simplified robots.txt with Allow: /, private-route Disallow rules, and Sitemap: https://eleosdecor.com/sitemap.xml
+- robots.txt intentionally does not include a Host directive because Google does not use it
+- Admin, auth, customer, and cart route layouts set robots noindex/nofollow to keep private or account-specific pages out of search results
+- Default social sharing fallback image is public/eleos-og-image.png, with SVG source at public/eleos-og-image.svg
+- Navbar uses the dedicated transparent logo asset public/eleos-logo-nav.svg so the header stays visually clean
+- SEO infrastructure is complete; Google indexing is in progress
+
+## SEO Files
+- lib/seo.js stores production SEO constants and shared helpers
+- app/layout.js defines global metadata and social preview defaults
+- app/product/[id]/page.js defines dynamic product metadata and Product JSON-LD
+- app/sitemap.js generates sitemap.xml with static, category, and product routes
+- app/robots.js generates production robots.txt
+- public/eleos-og-image.png is the default Open Graph/Twitter image fallback
+- public/eleos-og-image.svg is the editable source for the default social sharing image
+
+## robots.txt Current State
+Production robots.txt should stay clean and minimal:
+
+```txt
+User-agent: *
+Allow: /
+
+Disallow: /admin/
+Disallow: /auth/
+Disallow: /customer/
+Disallow: /cart/
+Disallow: /api/
+
+Sitemap: https://eleosdecor.com/sitemap.xml
+```
+
+- Host directive was removed because it is unnecessary for Google
+- Redundant Allow directives were removed because Allow: / already covers public routes such as /shop, /about, /contact, and /product/
+
+## Sitemap / Google Search Console
+- Google Search Console property has been set up for eleosdecor.com
+- Sitemap was submitted successfully
+- Google discovered 48 URLs from the sitemap at the time of setup
+- Sitemap includes homepage, shop, about, contact, category URLs, and product detail URLs
+- Homepage and key pages may initially show "URL is not on Google" because indexing can take time for a new domain
+- Request Indexing should be used for homepage, shop, and important product pages
+
+## Current SEO Status
+- SEO infrastructure is complete
+- Google indexing is now in progress
+- Next steps are monitoring Search Console, requesting indexing for key pages, and improving product SEO content over time
+
+## Performance / Scaling
+- Shop page has been optimized for Supabase-side pagination, filtering, full-text search, and sorting
+- Database performance indexes are in place for product/category/date/price/search workflows
+- Product full-text search RPC/search_vector is in place
+- Product thumbnails and Supabase image transformations are improved for product cards and previews
+- Product detail/gallery images use Next Image optimization and lazy-loaded thumbnails
+- Admin analytics RPC exists through get_admin_analytics, with app-level fallback count queries
+- robots/sitemap build passes with Next.js App Router
+
 ## AI Decor Assistant
 - Global floating AI assistant rendered from app/layout.js
 - Existing WhatsApp floating button remains separate for direct human support
 - Frontend-only recommendation logic for now; no OpenAI backend connected yet
+- AI Decor Assistant is product-aware and searches Supabase products
 - Detects decor spaces such as living room, dining area, TV console, bedroom, office, entryway, hallway, kitchen, apartment, and home
 - Detects budget formats such as 500k, 1m, 1,000,000 naira, and ₦250,000
 - Detects style preferences such as luxury, modern, minimal, cozy, classy, warm, simple, and elegant
 - Generates decor category recommendations and budget allocation guidance
+- Has guided decor consultation flow
+- Reuses conversation context and handles customer preference changes mid-chat
 - Supports product availability questions by searching Supabase products
 - Product search uses title, category, and description through products.search_vector/full-text RPC with fallback search logic
 - Product result messages render each product with title, price, and an immediate View Product button before global Shop/WhatsApp CTAs
+- Product result buttons appear directly under each product
 - Includes quick actions, typed messages, loading state, and Clear chat
 - Chat history persists during navigation and browser refresh
 - Guest persistence uses localStorage scoped to guest
@@ -146,12 +241,20 @@ Contains React Context providers such as:
 - WhatsApp checkout flow
 - Checkout autofill from user profile
 - Checkout inquiries store canonical lowercase status values such as new, payment_pending, paid, processing, delivered, and cancelled
+- Checkout is WhatsApp-assisted commerce, not an automatic payment-complete flow
+- After a checkout inquiry is saved and WhatsApp is triggered, customers see an Order Request Sent confirmation explaining that Eleos Decor will confirm availability, delivery, and final order details on WhatsApp
+- Checkout now has an Order Request Sent assisted-commerce experience
+- Order Request Sent includes Continue on WhatsApp, Return to Shop, and View My Orders for logged-in customers
+- Duplicate checkout submissions are prevented after a successful order request
+- Customer dashboard includes order tracking
 
 ## Authentication
 - Supabase authentication
 - Google login integration
 - Email/password signup
 - Customer dashboard
+- Customer dashboard includes My Orders tracking for the signed-in user's checkout inquiries
+- My Orders displays order ID, created date, status, order summary, total amount, status badge, status description, and lightweight progress tracking
 - Admin emails are detected with lib/adminAuth.js and should not be treated as customer sessions in Navbar/customer dashboard
 - Admin sessions visiting shop pages should see Admin Dashboard navigation, not customer dashboard navigation
 
@@ -164,6 +267,9 @@ Contains React Context providers such as:
 - Product upload/edit disables submit controls while saving and shows toast confirmation to prevent duplicate submissions
 - Products and orders tabs use pagination instead of loading all records
 - Analytics uses get_admin_analytics RPC when available, with fallback count queries
+- Orders remain canonical in the database while the admin UI shows readable WhatsApp-assisted workflow labels and descriptions
+- Admins manually move order requests through new, contacted, payment_pending, paid, processing, delivered, and cancelled as the WhatsApp conversation/payment/delivery progresses
+- Admin can update canonical statuses: new, contacted, payment_pending, paid, processing, delivered, and cancelled
 
 ---
 
@@ -297,6 +403,9 @@ Performance index SQL:
 - Product detail main image should stay priority optimized; gallery thumbnails should remain lazy loaded
 - Supabase storage image URLs are configured in next.config.mjs remotePatterns
 - next.config.mjs also allows Supabase transformed image URLs under /storage/v1/render/image/public/**
+- SEO sitemap queries should avoid products.updated_at unless that column is added to Supabase
+- Keep robots.txt minimal: Allow: /, private route disallows with trailing slashes, and the production sitemap URL
+- Keep public canonicals pointed at https://eleosdecor.com paths through metadataBase
 - Supabase auth redirects
 - Admin/customer session distinction in Navbar and customer dashboard
 - Image optimization
@@ -329,16 +438,18 @@ Purpose:
 # FUTURE FEATURES
 
 Potential future additions:
-- OpenAI-powered chatbot backend at app/api/chatbot/route.js
-- AI assistant product-aware recommendations with deeper inventory context
+- Delivery fee/location system
+- Security/stability audit
+- Email notifications
+- Homepage trust/brand sections
+- Future OpenAI integration only after cost/planning decision
+- OpenAI-powered chatbot backend at app/api/chatbot/route.js if approved later
+- AI assistant product-aware recommendations with deeper inventory context if backend AI is approved later
 - Real thumbnail uploads with thumbnail_url column instead of relying only on Supabase runtime transforms
-- Delivery fee calculator
-- Order tracking
 - Saved addresses
 - Instagram feed integration
-- Customer order history
 - Payment gateway integration
-- SEO optimization
+- Advanced SEO enhancements such as richer category pages, product review aggregateRating schema, and dynamic OG images
 - Performance optimization
 - Clean remaining React hook dependency lint warnings
 - Replace remaining plain img tags with next/image where practical
