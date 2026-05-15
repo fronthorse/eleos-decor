@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import Link from "next/link";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import CheckoutForm from "../components/CheckoutForm";
@@ -19,6 +21,7 @@ function handlePreviewImageError(event) {
 }
 
 export default function CartPage() {
+  const [sentOrderRequest, setSentOrderRequest] = useState(null);
   const {
     cartItems,
     removeFromCart,
@@ -39,7 +42,59 @@ export default function CartPage() {
             <h1 className="luxury-heading">Shopping Cart</h1>
           </div>
 
-          {cartItems.length === 0 ? (
+          {sentOrderRequest ? (
+            <div className="order-request-card mx-auto">
+              <p className="section-label">WhatsApp Checkout</p>
+              <h2 className="luxury-heading mb-3">
+                {"\u2728"} Order Request Sent
+              </h2>
+
+              <p className="text-muted mb-3">
+                Your decor request has been prepared and sent to Eleos Decor on
+                WhatsApp.
+              </p>
+
+              <div className="order-request-steps">
+                <p>Our team will:</p>
+                <ul>
+                  <li>confirm product availability</li>
+                  <li>discuss delivery details</li>
+                  <li>finalize your order</li>
+                </ul>
+              </div>
+
+              <p className="text-muted small mb-4">
+                Order ID:{" "}
+                <strong>{sentOrderRequest.orderNumber}</strong>. This request is
+                not a completed payment yet. If you closed WhatsApp
+                accidentally, you can reopen the conversation below.
+              </p>
+
+              <div className="order-request-actions">
+                <a
+                  href={sentOrderRequest.whatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-success"
+                >
+                  Continue on WhatsApp
+                </a>
+
+                <Link href="/shop" className="btn btn-outline-dark">
+                  Return to Shop
+                </Link>
+
+                {sentOrderRequest.hasAccount && (
+                  <Link
+                    href="/customer/dashboard#orders"
+                    className="btn btn-dark"
+                  >
+                    View My Orders
+                  </Link>
+                )}
+              </div>
+            </div>
+          ) : cartItems.length === 0 ? (
             <EmptyState
   title="Your cart is empty"
   message="Add beautiful decor items to your cart and return here to complete checkout."
@@ -132,6 +187,7 @@ export default function CartPage() {
                   <CheckoutForm
                     cartItems={cartItems}
                     cartTotal={cartTotal}
+                    onOrderRequestSent={setSentOrderRequest}
                   />
 
                   <button

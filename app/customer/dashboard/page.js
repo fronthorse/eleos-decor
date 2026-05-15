@@ -8,9 +8,45 @@ import EmptyState from "../../components/EmptyState";
 import { createClient } from "../../../lib/supabase/client";
 import { getSessionSafely } from "../../../lib/supabase/auth";
 import { isAdminEmail } from "../../../lib/adminAuth";
-import { formatOrderStatus } from "../../../lib/orderStatuses";
+import {
+  formatOrderStatus,
+  getOrderStatusDescription,
+  getOrderStatusIcon,
+  getOrderStatusProgress,
+  normalizeOrderStatus,
+} from "../../../lib/orderStatuses";
 import { useCart } from "../../../context/CartContext";
 import { useWishlist } from "../../../context/WishlistContext";
+
+const ORDER_PROGRESS_STEPS = [
+  { status: "new", label: "Request Sent" },
+  { status: "contacted", label: "Contacted" },
+  { status: "payment_pending", label: "Payment" },
+  { status: "paid", label: "Confirmed" },
+  { status: "processing", label: "Delivery" },
+  { status: "delivered", label: "Delivered" },
+];
+
+function formatNaira(value) {
+  return `\u20a6${Number(value || 0).toLocaleString()}`;
+}
+
+function summarizeOrderItems(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return "Decor order request";
+  }
+
+  const totalItems = items.reduce(
+    (sum, item) => sum + Number(item.quantity || 1),
+    0
+  );
+  const firstItem = items[0]?.title || "Decor item";
+  const extraCount = Math.max(0, items.length - 1);
+
+  return `${firstItem}${extraCount > 0 ? ` + ${extraCount} more` : ""} (${
+    totalItems
+  } item${totalItems === 1 ? "" : "s"})`;
+}
 
 export default function CustomerDashboardPage() {
   const router = useRouter();
@@ -223,8 +259,15 @@ export default function CustomerDashboardPage() {
               </div>
             </div>
 
-            <div className="soft-card p-4">
-              <h5 className="fw-bold mb-3">Order History</h5>
+            <div className="soft-card p-4" id="orders">
+              <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
+                <div>
+                  <h5 className="fw-bold mb-1">My Orders</h5>
+                  <p className="text-muted small mb-0">
+                    Track your WhatsApp-assisted order requests here.
+                  </p>
+                </div>
+              </div>
 
               {orders.length === 0 ? (
                 <EmptyState
@@ -232,32 +275,66 @@ export default function CustomerDashboardPage() {
                   message="Your checkout orders will appear here after you place an order."
                 />
               ) : (
-                <div className="table-responsive">
-                  <table className="table align-middle">
-                    <thead>
-                      <tr>
-                        <th>Order ID</th>
-                        <th>Date</th>
-                        <th>Status</th>
-                        <th>Total</th>
-                      </tr>
-                    </thead>
+                <div className="customer-order-list">
+                  {orders.map((order) => {
+                    const status = normalizeOrderStatus(order.status);
+                    const progress = getOrderStatusProgress(status);
+                    const isCancelled = status === "cancelled";
 
-                    <tbody>
-                      {orders.map((order) => (
-                        <tr key={order.id}>
-                          <td>{order.order_number || `#${order.id}`}</td>
-                          <td>
-                            {new Date(order.created_at).toLocaleDateString()}
-                          </td>
-                          <td>{formatOrderStatus(order.status)}</td>
-                          <td>
-                            ₦{Number(order.total_amount || 0).toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                    return (
+                      <article className="customer-order-card" key={order.id}>
+                        <div className="customer-order-header">
+                          <div>
+                            <p className="text-muted small mb-1">
+                              {new Date(order.created_at).toLocaleString()}
+                            </p>
+                            <h6 className="fw-bold mb-1">
+                              {order.order_number || `Order #${order.id}`}
+                            </h6>
+                            <p className="text-muted mb-0">
+                              {summarizeOrderItems(order.items)}
+                            </p>
+                          </div>
+
+                          <span className={`status-badge status-${status}`}>
+                            {getOrderStatusIcon(status)}{" "}
+                            {formatOrderStatus(status)}
+                          </span>
+                        </div>
+
+                        <div className="customer-order-meta">
+                          <span>
+                            <strong>Total:</strong>{" "}
+                            {formatNaira(order.total_amount)}
+                          </span>
+                          <span>{getOrderStatusDescription(status)}</span>
+                        </div>
+
+                        {!isCancelled && (
+                          <div className="order-progress">
+                            {ORDER_PROGRESS_STEPS.map((step) => {
+                              const stepProgress = getOrderStatusProgress(
+                                step.status
+                              );
+                              const isActive = progress >= stepProgress;
+
+                              return (
+                                <div
+                                  className={`order-progress-step ${
+                                    isActive ? "active" : ""
+                                  }`}
+                                  key={step.status}
+                                >
+                                  <span></span>
+                                  <small>{step.label}</small>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </div>

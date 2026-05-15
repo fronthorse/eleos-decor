@@ -14,7 +14,12 @@ function cleanPrice(price) {
   return Number(String(price || "0").replace(/,/g, ""));
 }
 
-export default function CheckoutForm({ cartItems, cartTotal, compact = false }) {
+export default function CheckoutForm({
+  cartItems,
+  cartTotal,
+  compact = false,
+  onOrderRequestSent,
+}) {
   const supabase = createClient();
   const { clearCart } = useCart();
 
@@ -26,6 +31,7 @@ export default function CheckoutForm({ cartItems, cartTotal, compact = false }) 
   const [orderNote, setOrderNote] = useState("");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittedOrderNumber, setSubmittedOrderNumber] = useState("");
 
   const whatsappNumber = "2348168350533";
 
@@ -61,6 +67,10 @@ export default function CheckoutForm({ cartItems, cartTotal, compact = false }) 
   }, []);
 
   async function handleCheckout() {
+    if (isSubmitting || submittedOrderNumber) {
+      return;
+    }
+
     if (cartItems.length === 0) {
       setMessage("Your cart is empty.");
       return;
@@ -158,8 +168,16 @@ Thank you for shopping with Eleos Decor ✨
       "_blank"
     );
 
+    setSubmittedOrderNumber(orderNumber);
+    onOrderRequestSent?.({
+      orderNumber,
+      whatsappUrl: `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
+        orderMessage
+      )}`,
+      hasAccount: Boolean(user?.id),
+    });
     clearCart?.();
-    setMessage("Order saved. Continue on WhatsApp.");
+    setMessage("Order request sent. Continue on WhatsApp to finalize.");
     setIsSubmitting(false);
   }
 
@@ -193,8 +211,16 @@ Thank you for shopping with Eleos Decor ✨
         <textarea className="form-control" rows={compact ? "2" : "3"} value={orderNote} onChange={(e) => setOrderNote(e.target.value)} placeholder="Optional note about your order" />
       </div>
 
-      <button onClick={handleCheckout} disabled={isSubmitting} className="btn btn-dark w-100 mb-2">
-        {isSubmitting ? "Processing..." : "Checkout on WhatsApp"}
+      <button
+        onClick={handleCheckout}
+        disabled={isSubmitting || Boolean(submittedOrderNumber)}
+        className="btn btn-dark w-100 mb-2"
+      >
+        {isSubmitting
+          ? "Processing..."
+          : submittedOrderNumber
+          ? "Order Request Sent"
+          : "Checkout on WhatsApp"}
       </button>
 
       {message && <p className="text-muted small mt-2 mb-0">{message}</p>}

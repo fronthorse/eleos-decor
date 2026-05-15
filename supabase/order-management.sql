@@ -54,7 +54,6 @@ alter table checkout_inquiries
   check (
     status in (
       'new',
-      'pending',
       'contacted',
       'payment_pending',
       'paid',

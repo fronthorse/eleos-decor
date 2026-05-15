@@ -1336,16 +1336,152 @@ body {
   color: #166534;
 }
 
-.status-processing,
-.status-delivered,
-.status-fulfilled {
+.status-processing {
   background: #e0f2fe;
   color: #075985;
+}
+
+.status-delivered,
+.status-fulfilled {
+  background: #dcfce7;
+  color: #166534;
 }
 
 .status-cancelled {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.order-request-card {
+  background: #fff;
+  border: 1px solid rgba(31, 31, 31, 0.06);
+  border-radius: 28px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.06);
+  max-width: 720px;
+  padding: 36px;
+  text-align: center;
+}
+
+.order-request-steps {
+  background: #faf7f2;
+  border-radius: 18px;
+  margin: 0 auto 22px;
+  max-width: 460px;
+  padding: 18px 22px;
+  text-align: left;
+}
+
+.order-request-steps p {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.order-request-steps ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.order-request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+.customer-order-list {
+  display: grid;
+  gap: 16px;
+}
+
+.customer-order-card {
+  border: 1px solid rgba(31, 31, 31, 0.08);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.customer-order-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.customer-order-meta {
+  border-top: 1px solid rgba(31, 31, 31, 0.07);
+  color: #666;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.order-progress {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
+.order-progress-step {
+  color: #9a9a9a;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.order-progress-step span {
+  background: #e8e1d8;
+  border-radius: 999px;
+  display: block;
+  height: 6px;
+  margin-bottom: 8px;
+}
+
+.order-progress-step.active {
+  color: #1f1f1f;
+}
+
+.order-progress-step.active span {
+  background: #b8955f;
+}
+
+.assisted-commerce-note {
+  background: #fff;
+  border: 1px solid rgba(184, 149, 95, 0.24);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.order-workflow-description {
+  background: #faf7f2;
+  border-radius: 12px;
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 18px;
+  padding: 10px 12px;
+}
+
+@media (max-width: 768px) {
+  .order-request-card {
+    padding: 26px 20px;
+  }
+
+  .order-request-actions {
+    flex-direction: column;
+  }
+
+  .order-request-actions .btn {
+    width: 100%;
+  }
+
+  .customer-order-header {
+    flex-direction: column;
+  }
+
+  .order-progress {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 @media (max-width: 768px) {
   .luxury-section {

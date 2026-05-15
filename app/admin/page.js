@@ -8,6 +8,7 @@ import { isAdminEmail } from "../../lib/adminAuth";
 import { getSessionSafely } from "../../lib/supabase/auth";
 import {
   formatOrderStatus,
+  getOrderStatusDescription,
   normalizeOrderStatus,
   ORDER_STATUSES,
 } from "../../lib/orderStatuses";
@@ -880,6 +881,13 @@ export default function AdminPage() {
         {activeTab === "inquiries" && (
           <div>
             <h4 className="fw-bold mb-4">Orders</h4>
+            <div className="assisted-commerce-note mb-4">
+              <h6 className="fw-bold mb-2">WhatsApp-assisted workflow</h6>
+              <p className="text-muted mb-0">
+                Orders begin as requests. Move each order through the canonical
+                stages as WhatsApp confirmation, payment, and delivery progress.
+              </p>
+            </div>
 
             {inquiries.length === 0 ? (
               <p className="text-muted">No orders yet.</p>
@@ -926,6 +934,10 @@ We are contacting you regarding your order.`;
                             {formatOrderStatus(inquiry.status)}
                           </span>
                         </div>
+
+                        <p className="order-workflow-description">
+                          {getOrderStatusDescription(inquiry.status)}
+                        </p>
 
                         <div className="mb-3">
                           <p>
@@ -990,7 +1002,8 @@ We are contacting you regarding your order.`;
                         >
                           {ORDER_STATUSES.map((status) => (
                             <option value={status} key={status}>
-                              {formatOrderStatus(status)}
+                              {formatOrderStatus(status)} -{" "}
+                              {getOrderStatusDescription(status)}
                             </option>
                           ))}
                         </select>
