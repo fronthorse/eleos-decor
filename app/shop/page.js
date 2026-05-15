@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import Navbar from ".././components/Navbar";
 import Footer from ".././components/Footer";
@@ -10,18 +10,35 @@ import ProductSkeleton from ".././components/ProductSkeleton";
 import EmptyState from ".././components/EmptyState";
 
 import { createClient } from "../../lib/supabase/client";
+import {
+  applyProductSearchFilter,
+  searchProductsWithFullText,
+  sanitizeProductSearchTerm,
+} from "../../lib/productSearch";
+
+const PAGE_SIZE = 12;
+const SEARCH_DEBOUNCE_MS = 450;
+
+function getPositivePage(value) {
+  const page = Number.parseInt(value || "1", 10);
+  return Number.isFinite(page) && page > 0 ? page : 1;
+}
 
 function ShopContent() {
-  const supabase = createClient();
-
+  const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const categoryFromUrl = searchParams.get("category");
+
+  const categoryParam = searchParams.get("category") || "All";
+  const queryParam =
+    searchParams.get("search") || searchParams.get("query") || "";
+  const sortParam = searchParams.get("sort") || "newest";
+  const pageParam = getPositivePage(searchParams.get("page"));
 
   const [products, setProducts] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sortOption, setSortOption] = useState("newest");
-  const [visibleCount, setVisibleCount] = useState(12);
+  const [totalCount, setTotalCount] = useState(0);
+  const [searchTerm, setSearchTerm] = useState(queryParam);
   const [filterOpen, setFilterOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -50,85 +67,140 @@ function ShopContent() {
     "Artificial Water Fountains",
   ];
 
-  async function fetchProducts() {
-    const { data, error } = await supabase
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const showingStart = totalCount === 0 ? 0 : (pageParam - 1) * PAGE_SIZE + 1;
+  const showingEnd = Math.min(pageParam * PAGE_SIZE, totalCount);
+
+  const updateShopParams = useCallback((updates) => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (!value || value === "All" || value === "newest" || value === "1") {
+        params.delete(key);
+        return;
+      }
+
+      params.set(key, String(value));
+    });
+
+    const queryString = params.toString();
+    router.replace(queryString ? `${pathname}?${queryString}` : pathname, {
+      scroll: false,
+    });
+  }, [pathname, router, searchParams]);
+
+  const fetchProducts = useCallback(async () => {
+    setLoading(true);
+
+    const cleanSearch = sanitizeProductSearchTerm(queryParam);
+    const from = (pageParam - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    if (cleanSearch) {
+      try {
+        const { products: searchResults, totalCount: searchCount } =
+          await searchProductsWithFullText(supabase, {
+            searchQuery: cleanSearch,
+            category: categoryParam,
+            sort: sortParam,
+            limit: PAGE_SIZE,
+            offset: from,
+          });
+
+        if (searchResults.length === 0 && pageParam > 1) {
+          const { totalCount: firstPageSearchCount } =
+            await searchProductsWithFullText(supabase, {
+              searchQuery: cleanSearch,
+              category: categoryParam,
+              sort: sortParam,
+              limit: 1,
+              offset: 0,
+            });
+
+          setProducts([]);
+          setTotalCount(firstPageSearchCount);
+          setLoading(false);
+          return;
+        }
+
+        setProducts(searchResults);
+        setTotalCount(searchCount);
+        setLoading(false);
+        return;
+      } catch (error) {
+        console.warn("Full-text shop search failed; using fallback.", error);
+      }
+    }
+
+    let query = supabase
       .from("products")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .select("*", {
+        count: "exact",
+      });
+
+    if (categoryParam !== "All") {
+      query = query.eq("category", categoryParam);
+    }
+
+    query = applyProductSearchFilter(query, cleanSearch);
+
+    if (sortParam === "oldest") {
+      query = query.order("created_at", { ascending: true });
+    } else if (sortParam === "price-low") {
+      query = query.order("price", { ascending: true });
+    } else if (sortParam === "price-high") {
+      query = query.order("price", { ascending: false });
+    } else {
+      query = query.order("created_at", { ascending: false });
+    }
+
+    const { data, error, count } = await query.range(from, to);
 
     if (error) {
       console.log(error);
+      setProducts([]);
+      setTotalCount(0);
       setLoading(false);
       return;
     }
 
     setProducts(data || []);
+    setTotalCount(count || 0);
     setLoading(false);
-  }
+  }, [categoryParam, pageParam, queryParam, sortParam, supabase]);
+
+  useEffect(() => {
+    setSearchTerm(queryParam);
+  }, [queryParam]);
 
   useEffect(() => {
     fetchProducts();
-  }, []);
+  }, [fetchProducts]);
 
   useEffect(() => {
-    if (categoryFromUrl) {
-      setSelectedCategory(categoryFromUrl);
+    if (loading || totalCount === 0 || pageParam <= totalPages) {
+      return;
     }
-  }, [categoryFromUrl]);
+
+    updateShopParams({ page: totalPages });
+  }, [loading, pageParam, totalCount, totalPages, updateShopParams]);
 
   useEffect(() => {
-    setVisibleCount(12);
-  }, [selectedCategory, searchTerm, sortOption]);
+    const timer = window.setTimeout(() => {
+      const cleanSearch = sanitizeProductSearchTerm(searchTerm);
 
-  function getNumericPrice(price) {
-    return Number(
-      String(price)
-        .replace(/₦/g, "")
-        .replace(/,/g, "")
-        .trim()
-    );
-  }
-
-  const filteredProducts = products
-    .filter((product) => {
-      const matchesCategory =
-        selectedCategory === "All" || product.category === selectedCategory;
-
-      const search = searchTerm.toLowerCase().trim();
-
-      const searchableText = `
-        ${product.title || ""}
-        ${product.description || ""}
-        ${product.category || ""}
-        ${product.price || ""}
-      `.toLowerCase();
-
-      const matchesSearch =
-        search === "" || searchableText.includes(search);
-
-      return matchesCategory && matchesSearch;
-    })
-    .sort((a, b) => {
-      if (sortOption === "newest") {
-        return new Date(b.created_at) - new Date(a.created_at);
+      if (cleanSearch === queryParam) {
+        return;
       }
 
-      if (sortOption === "oldest") {
-        return new Date(a.created_at) - new Date(b.created_at);
-      }
+      updateShopParams({
+        search: cleanSearch,
+        page: "1",
+      });
+    }, SEARCH_DEBOUNCE_MS);
 
-      if (sortOption === "price-low") {
-        return getNumericPrice(a.price) - getNumericPrice(b.price);
-      }
-
-      if (sortOption === "price-high") {
-        return getNumericPrice(b.price) - getNumericPrice(a.price);
-      }
-
-      return 0;
-    });
-
-  const visibleProducts = filteredProducts.slice(0, visibleCount);
+    return () => window.clearTimeout(timer);
+  }, [queryParam, searchTerm, updateShopParams]);
 
   return (
     <>
@@ -140,7 +212,7 @@ function ShopContent() {
             <h1 className="fw-bold">Shop Eleos Decor</h1>
 
             <p className="text-muted">
-              Explore elegant décor pieces for beautiful living spaces.
+              Explore elegant decor pieces for beautiful living spaces.
             </p>
           </div>
 
@@ -165,7 +237,7 @@ function ShopContent() {
                   className="form-control form-control-lg"
                   placeholder="Search products..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(event) => setSearchTerm(event.target.value)}
                 />
               </div>
 
@@ -176,8 +248,13 @@ function ShopContent() {
 
                 <select
                   className="form-select form-select-lg"
-                  value={sortOption}
-                  onChange={(e) => setSortOption(e.target.value)}
+                  value={sortParam}
+                  onChange={(event) =>
+                    updateShopParams({
+                      sort: event.target.value,
+                      page: "1",
+                    })
+                  }
                 >
                   <option value="newest">Newest First</option>
                   <option value="oldest">Oldest First</option>
@@ -196,8 +273,13 @@ function ShopContent() {
 
                   <select
                     className="form-select"
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    value={categoryParam}
+                    onChange={(event) =>
+                      updateShopParams({
+                        category: event.target.value,
+                        page: "1",
+                      })
+                    }
                   >
                     {categories.map((category) => (
                       <option key={category} value={category}>
@@ -213,9 +295,7 @@ function ShopContent() {
                   </label>
 
                   <div className="bg-white border rounded-pill px-4 py-2 small">
-                    {selectedCategory === "All"
-                      ? "All categories"
-                      : selectedCategory}
+                    {categoryParam === "All" ? "All categories" : categoryParam}
                   </div>
                 </div>
               </div>
@@ -224,8 +304,8 @@ function ShopContent() {
 
           {!loading && (
             <p className="text-muted mb-4">
-              Showing {visibleProducts.length} of {filteredProducts.length}{" "}
-              product{filteredProducts.length === 1 ? "" : "s"}
+              Showing {showingStart}-{showingEnd} of {totalCount} product
+              {totalCount === 1 ? "" : "s"}
             </p>
           )}
 
@@ -237,7 +317,7 @@ function ShopContent() {
             </div>
           )}
 
-          {!loading && filteredProducts.length === 0 && (
+          {!loading && products.length === 0 && (
             <EmptyState
               title="No products found"
               message="Try another search term, category, or sorting option."
@@ -246,14 +326,20 @@ function ShopContent() {
             />
           )}
 
-          {!loading && filteredProducts.length > 0 && (
+          {!loading && products.length > 0 && (
             <>
               <div className="row g-4">
-                {visibleProducts.map((product) => (
+                {products.map((product) => (
                   <ProductCard
                     key={product.id}
                     id={product.id}
                     image={product.image_url}
+                    thumbnailImage={
+                      product.thumbnailImage ||
+                      product.thumbnailUrl ||
+                      product.thumbnail_url ||
+                      product.thumbnail_image
+                    }
                     title={product.title}
                     description={product.description}
                     price={product.price}
@@ -261,15 +347,32 @@ function ShopContent() {
                 ))}
               </div>
 
-              {visibleCount < filteredProducts.length && (
-                <div className="text-center mt-5">
+              {totalPages > 1 && (
+                <div className="shop-pagination">
                   <button
+                    type="button"
+                    className="btn btn-outline-dark px-4"
+                    disabled={pageParam <= 1}
                     onClick={() =>
-                      setVisibleCount((count) => count + 12)
+                      updateShopParams({ page: String(pageParam - 1) })
                     }
-                    className="btn btn-outline-dark px-5"
                   >
-                    Load More
+                    Previous
+                  </button>
+
+                  <span>
+                    Page {pageParam} of {totalPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    className="btn btn-outline-dark px-4"
+                    disabled={pageParam >= totalPages}
+                    onClick={() =>
+                      updateShopParams({ page: String(pageParam + 1) })
+                    }
+                  >
+                    Next
                   </button>
                 </div>
               )}

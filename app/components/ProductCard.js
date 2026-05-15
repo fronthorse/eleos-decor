@@ -2,29 +2,53 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
+import {
+  getProductPreviewImageSrc,
+  getProductCardImageSrc,
+  PRODUCT_IMAGE_FALLBACK,
+} from "../../lib/productImages";
 
 export default function ProductCard({
   id,
   image,
+  thumbnailImage,
   title,
   description,
   price,
 }) {
   const { addToCart } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
+  const [imageFailed, setImageFailed] = useState(false);
 
   const saved = isInWishlist(id);
+  const optimizedImage = getProductCardImageSrc(image, thumbnailImage);
+  const imageSrc =
+    optimizedImage && !imageFailed ? optimizedImage : PRODUCT_IMAGE_FALLBACK;
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [image, thumbnailImage]);
 
   function handleAddToCart() {
+    const cartProduct = {
+      id,
+      title,
+      price,
+      image_url: image,
+      thumbnailImage,
+    };
+
     addToCart({
       id,
       title,
       price,
       image_url: image,
+      thumbnail_url: getProductPreviewImageSrc(cartProduct),
     });
 
     toast.success("Added to cart");
@@ -59,12 +83,14 @@ export default function ProductCard({
             </button>
 
             <Image
-              src={image}
+              src={imageSrc}
               className="product-image"
-              alt={title}
-              width={500}
-              height={400}
+              alt={title || "Product image"}
+              width={640}
+              height={512}
               loading="lazy"
+              sizes="(max-width: 575px) 100vw, (max-width: 991px) 50vw, 33vw"
+              onError={() => setImageFailed(true)}
             />
           </div>
 

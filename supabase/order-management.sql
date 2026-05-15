@@ -18,9 +18,36 @@ alter table checkout_inquiries
 create unique index if not exists checkout_inquiries_order_number_key
   on checkout_inquiries(order_number);
 
--- Keep statuses flexible enough for old and new records.
+-- Keep order statuses canonical and display them with labels in the app.
 alter table checkout_inquiries
   drop constraint if exists checkout_inquiries_status_check;
+
+update checkout_inquiries
+set status = case status
+  when 'New' then 'new'
+  when 'pending' then 'new'
+  when 'Contacted' then 'contacted'
+  when 'Payment Pending' then 'payment_pending'
+  when 'Paid' then 'paid'
+  when 'payment_confirmed' then 'paid'
+  when 'Processing' then 'processing'
+  when 'Delivered' then 'delivered'
+  when 'fulfilled' then 'delivered'
+  when 'Cancelled' then 'cancelled'
+  else status
+end
+where status in (
+  'New',
+  'pending',
+  'Contacted',
+  'Payment Pending',
+  'Paid',
+  'payment_confirmed',
+  'Processing',
+  'Delivered',
+  'fulfilled',
+  'Cancelled'
+);
 
 alter table checkout_inquiries
   add constraint checkout_inquiries_status_check
@@ -31,17 +58,11 @@ alter table checkout_inquiries
       'contacted',
       'payment_pending',
       'paid',
-      'payment_confirmed',
       'processing',
       'delivered',
-      'fulfilled',
       'cancelled'
     )
   );
-
-update checkout_inquiries
-set status = 'new'
-where status = 'pending';
 
 create index if not exists checkout_inquiries_user_id_idx
   on checkout_inquiries(user_id);

@@ -5,6 +5,7 @@ import "./globals.css";
 import AOSClient from "./components/AOSClient";
 import { CartProvider } from "../context/CartContext";
 import WhatsAppFloat from "./components/WhatsAppFloat";
+import AIDecorAssistant from "./components/AIDecorAssistant";
 import { Toaster } from "react-hot-toast";
 import { WishlistProvider } from "../context/WishlistContext";
 import { RecentlyViewedProvider } from "../context/RecentlyViewedContext";
@@ -35,6 +36,7 @@ export default function RootLayout({ children }) {
     <CartProvider>
       <RecentlyViewedProvider>
         {children}
+        <AIDecorAssistant />
         <WhatsAppFloat />
       </RecentlyViewedProvider>
     </CartProvider>

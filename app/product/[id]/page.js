@@ -104,6 +104,12 @@ export default async function ProductDetails({ params }) {
                   key={item.id}
                   id={item.id}
                   image={item.image_url}
+                  thumbnailImage={
+                    item.thumbnailImage ||
+                    item.thumbnailUrl ||
+                    item.thumbnail_url ||
+                    item.thumbnail_image
+                  }
                   title={item.title}
                   description={item.description}
                   price={item.price}

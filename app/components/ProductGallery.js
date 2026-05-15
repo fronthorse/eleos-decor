@@ -2,26 +2,53 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import {
+  getProductPreviewImageSrc,
+  PRODUCT_IMAGE_FALLBACK,
+} from "../../lib/productImages";
+
+function isValidImageUrl(imageUrl) {
+  return typeof imageUrl === "string" && imageUrl.trim().length > 0;
+}
 
 export default function ProductGallery({ mainImage, galleryImages = [], title }) {
-  const images =
-    galleryImages && galleryImages.length > 0 ? galleryImages : [mainImage];
+  const galleryList = Array.isArray(galleryImages) ? galleryImages : [];
+  const images = [mainImage, ...galleryList]
+    .filter(isValidImageUrl)
+    .filter((image, index, list) => list.indexOf(image) === index);
+  const safeImages = images.length > 0 ? images : [PRODUCT_IMAGE_FALLBACK];
+  const imageAlt = title || "Product image";
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [zoomOpen, setZoomOpen] = useState(false);
   const [touchStart, setTouchStart] = useState(null);
+  const [failedImages, setFailedImages] = useState({});
+  const [imageLoading, setImageLoading] = useState(true);
 
-  const activeImage = images[activeIndex];
+  const activeImage = safeImages[activeIndex] || safeImages[0];
+  const displayImage = failedImages[activeImage]
+    ? PRODUCT_IMAGE_FALLBACK
+    : activeImage;
+
+  function handleImageError(imageUrl) {
+    setFailedImages((current) => ({
+      ...current,
+      [imageUrl]: true,
+    }));
+    setImageLoading(false);
+  }
 
   function showPrevious() {
+    setImageLoading(true);
     setActiveIndex((current) =>
-      current === 0 ? images.length - 1 : current - 1
+      current === 0 ? safeImages.length - 1 : current - 1
     );
   }
 
   function showNext() {
+    setImageLoading(true);
     setActiveIndex((current) =>
-      current === images.length - 1 ? 0 : current + 1
+      current === safeImages.length - 1 ? 0 : current + 1
     );
   }
 
@@ -50,12 +77,19 @@ export default function ProductGallery({ mainImage, galleryImages = [], title })
           onTouchStart={(e) => setTouchStart(e.touches[0].clientX)}
           onTouchEnd={handleTouchEnd}
         >
+          {imageLoading && <div className="gallery-image-skeleton" />}
+
           <Image
-  src={activeImage}
-  alt={title}
-  width={900}
-  height={700}
+            key={displayImage}
+            src={displayImage}
+            alt={imageAlt}
+            width={700}
+            height={700}
+            priority={activeIndex === 0}
+            sizes="(max-width: 768px) 100vw, 50vw"
             onClick={() => setZoomOpen(true)}
+            onLoad={() => setImageLoading(false)}
+            onError={() => handleImageError(activeImage)}
             className="img-fluid rounded shadow product-zoom-image"
             style={{
               width: "100%",
@@ -65,7 +99,7 @@ export default function ProductGallery({ mainImage, galleryImages = [], title })
             }}
           />
 
-          {images.length > 1 && (
+          {safeImages.length > 1 && (
             <>
               <button
                 type="button"
@@ -84,30 +118,42 @@ export default function ProductGallery({ mainImage, galleryImages = [], title })
               </button>
 
               <div className="gallery-counter">
-                {activeIndex + 1} / {images.length}
+                {activeIndex + 1} / {safeImages.length}
               </div>
             </>
           )}
         </div>
 
-        {images.length > 1 && (
+        {safeImages.length > 1 && (
           <div className="gallery-thumbnails">
-            {images.map((image, index) => (
-              <button
-                key={index}
-                onClick={() => setActiveIndex(index)}
-                className={`gallery-thumb ${
-                  activeIndex === index ? "active" : ""
-                }`}
-              >
-                <Image
-  src={image}
-  alt={`${title} ${index + 1}`}
-  width={120}
-  height={120}
-/>
-              </button>
-            ))}
+            {safeImages.map((image, index) => {
+              const thumbImage = failedImages[image]
+                ? PRODUCT_IMAGE_FALLBACK
+                : getProductPreviewImageSrc({ image_url: image });
+
+              return (
+                <button
+                  key={index}
+                  onClick={() => {
+                    setImageLoading(true);
+                    setActiveIndex(index);
+                  }}
+                  className={`gallery-thumb ${
+                    activeIndex === index ? "active" : ""
+                  }`}
+                >
+                  <Image
+                    src={thumbImage}
+                    alt={`${imageAlt} ${index + 1}`}
+                    width={120}
+                    height={120}
+                    loading="lazy"
+                    sizes="82px"
+                    onError={() => handleImageError(image)}
+                  />
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -122,12 +168,14 @@ export default function ProductGallery({ mainImage, galleryImages = [], title })
           </button>
 
           <Image
-  src={activeImage}
-  alt={title}
-  width={1400}
-  height={1200}
-  className="image-zoom-full"
-/>
+            src={displayImage}
+            alt={imageAlt}
+            width={1200}
+            height={1200}
+            sizes="95vw"
+            className="image-zoom-full"
+            onError={() => handleImageError(activeImage)}
+          />
         </div>
       )}
     </>

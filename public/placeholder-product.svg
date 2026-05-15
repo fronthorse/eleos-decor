@@ -1,0 +1,8 @@
+<svg width="700" height="700" viewBox="0 0 700 700" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="700" height="700" fill="#FAF7F2"/>
+  <rect x="88" y="88" width="524" height="524" rx="34" fill="#FFFFFF" stroke="#E8DCCB" stroke-width="4"/>
+  <circle cx="258" cy="270" r="54" fill="#E8DCCB"/>
+  <path d="M162 528L288 394L376 476L438 408L538 528H162Z" fill="#D8C3A1"/>
+  <path d="M204 594H496" stroke="#B8955F" stroke-width="12" stroke-linecap="round"/>
+  <text x="350" y="638" text-anchor="middle" fill="#6F6F6F" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700">Eleos Decor</text>
+</svg>

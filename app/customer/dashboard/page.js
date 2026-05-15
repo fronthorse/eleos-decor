@@ -7,6 +7,8 @@ import Footer from "../../components/Footer";
 import EmptyState from "../../components/EmptyState";
 import { createClient } from "../../../lib/supabase/client";
 import { getSessionSafely } from "../../../lib/supabase/auth";
+import { isAdminEmail } from "../../../lib/adminAuth";
+import { formatOrderStatus } from "../../../lib/orderStatuses";
 import { useCart } from "../../../context/CartContext";
 import { useWishlist } from "../../../context/WishlistContext";
 
@@ -68,6 +70,11 @@ export default function CustomerDashboardPage() {
       return;
     }
 
+    if (isAdminEmail(session.user.email)) {
+      router.push("/admin");
+      return;
+    }
+
     setUser(session.user);
 
     await fetchProfile(session.user.id);
@@ -90,7 +97,6 @@ export default function CustomerDashboardPage() {
 
     const { error } = await supabase.from("profiles").upsert({
       id: user.id,
-      email: user.email,
       full_name: fullName,
       phone,
       delivery_address: deliveryAddress,
@@ -244,7 +250,7 @@ export default function CustomerDashboardPage() {
                           <td>
                             {new Date(order.created_at).toLocaleDateString()}
                           </td>
-                          <td>{order.status || "New"}</td>
+                          <td>{formatOrderStatus(order.status)}</td>
                           <td>
                             ₦{Number(order.total_amount || 0).toLocaleString()}
                           </td>

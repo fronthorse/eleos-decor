@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 import { getSessionSafely } from "../../lib/supabase/auth";
 import { useCart } from "../../context/CartContext";
+import { normalizeOrderStatus } from "../../lib/orderStatuses";
 
 function generateOrderNumber() {
   return `ELEOS-${Date.now()}`;
@@ -126,7 +127,7 @@ Thank you for shopping with Eleos Decor ✨
         items: cartItems,
         total_amount: cleanPrice(cartTotal),
         order_note: orderNote.trim() || null,
-        status: "New",
+        status: normalizeOrderStatus("new"),
         user_id: user?.id || null,
       },
     ]);

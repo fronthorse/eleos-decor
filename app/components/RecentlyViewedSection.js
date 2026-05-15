@@ -30,6 +30,12 @@ export default function RecentlyViewedSection({ currentProductId }) {
               key={product.id}
               id={product.id}
               image={product.image_url}
+              thumbnailImage={
+                product.thumbnailImage ||
+                product.thumbnailUrl ||
+                product.thumbnail_url ||
+                product.thumbnail_image
+              }
               title={product.title}
               description={product.description}
               price={product.price}

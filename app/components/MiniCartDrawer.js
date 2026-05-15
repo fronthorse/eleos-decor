@@ -4,6 +4,18 @@ import Link from "next/link";
 import { useCart } from "../../context/CartContext";
 import CheckoutForm from "./CheckoutForm";
 import EmptyState from "./EmptyState";
+import {
+  getProductPreviewImageSrc,
+  PRODUCT_IMAGE_FALLBACK,
+} from "../../lib/productImages";
+
+function handlePreviewImageError(event) {
+  if (event.currentTarget.src.includes(PRODUCT_IMAGE_FALLBACK)) {
+    return;
+  }
+
+  event.currentTarget.src = PRODUCT_IMAGE_FALLBACK;
+}
 
 export default function MiniCartDrawer({ isOpen, onClose }) {
   const {
@@ -44,10 +56,11 @@ export default function MiniCartDrawer({ isOpen, onClose }) {
                     className="mini-cart-item d-flex gap-3 mb-4"
                   >
                     <img
-  src={item.image_url}
-  alt={item.title}
-  loading="lazy"
-/>
+                      src={getProductPreviewImageSrc(item)}
+                      alt={item.title}
+                      loading="lazy"
+                      onError={handlePreviewImageError}
+                    />
 
                     <div className="flex-grow-1">
                       <h6 className="mini-cart-item-title fw-bold mb-1">

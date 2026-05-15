@@ -2,6 +2,7 @@
 
 import toast from "react-hot-toast";
 import { useCart } from "../../context/CartContext";
+import { getProductPreviewImageSrc } from "../../lib/productImages";
 
 export default function WhatsAppOrderBox({ product }) {
   const { addToCart } = useCart();
@@ -12,6 +13,7 @@ export default function WhatsAppOrderBox({ product }) {
       title: product.title,
       price: product.price,
       image_url: product.image_url,
+      thumbnail_url: getProductPreviewImageSrc(product),
     });
 
     toast.success("Added to cart");

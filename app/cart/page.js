@@ -5,6 +5,18 @@ import Footer from "../components/Footer";
 import CheckoutForm from "../components/CheckoutForm";
 import EmptyState from "../components/EmptyState";
 import { useCart } from "../../context/CartContext";
+import {
+  getProductPreviewImageSrc,
+  PRODUCT_IMAGE_FALLBACK,
+} from "../../lib/productImages";
+
+function handlePreviewImageError(event) {
+  if (event.currentTarget.src.includes(PRODUCT_IMAGE_FALLBACK)) {
+    return;
+  }
+
+  event.currentTarget.src = PRODUCT_IMAGE_FALLBACK;
+}
 
 export default function CartPage() {
   const {
@@ -42,10 +54,11 @@ export default function CartPage() {
                     <div className="row align-items-center g-3">
                       <div className="col-md-3">
                         <img
-                          src={item.image_url}
+                          src={getProductPreviewImageSrc(item)}
                           alt={item.title}
                           loading="lazy"
                           className="img-fluid rounded"
+                          onError={handlePreviewImageError}
                           style={{
                             height: "140px",
                             width: "100%",

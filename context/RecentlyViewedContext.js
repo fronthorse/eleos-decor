@@ -32,6 +32,11 @@ export function RecentlyViewedProvider({ children }) {
           title: product.title,
           price: product.price,
           image_url: product.image_url,
+          thumbnailImage:
+            product.thumbnailImage ||
+            product.thumbnailUrl ||
+            product.thumbnail_url ||
+            product.thumbnail_image,
           description: product.description,
         },
         ...filtered,

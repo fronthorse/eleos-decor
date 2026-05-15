@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
+import { isAdminEmail } from "../../../lib/adminAuth";
 
 export default function CustomerLoginPage() {
   const router = useRouter();
@@ -22,13 +23,20 @@ export default function CustomerLoginPage() {
 
   setMessage("Logging in...");
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
 
   if (error) {
     setMessage(error.message);
+    return;
+  }
+
+  if (isAdminEmail(data.user?.email)) {
+    setMessage("Admin account detected. Redirecting to admin portal...");
+    router.push("/admin");
+    router.refresh();
     return;
   }
 

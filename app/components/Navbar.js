@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCart } from "../../context/CartContext";
 import { createClient } from "../../lib/supabase/client";
 import { getSessionSafely } from "../../lib/supabase/auth";
+import { isAdminEmail } from "../../lib/adminAuth";
 import MiniCartDrawer from "./MiniCartDrawer";
 import { useRouter } from "next/navigation";
 import { FiShoppingBag } from "react-icons/fi";
@@ -15,6 +16,7 @@ const router = useRouter();
   const { cartCount, clearCart } = useCart();
   const [cartOpen, setCartOpen] = useState(false);
   const [user, setUser] = useState(null);
+  const isAdmin = isAdminEmail(user?.email);
 
   async function checkUser() {
     const { session } = await getSessionSafely(supabase);
@@ -120,6 +122,23 @@ const router = useRouter();
                     <a className="btn btn-sm btn-dark px-4" href="/customer/signup">
                       Sign Up
                     </a>
+                  </li>
+                </>
+              ) : isAdmin ? (
+                <>
+                  <li className="nav-item">
+                    <a className="nav-link" href="/admin">
+                      Admin Dashboard
+                    </a>
+                  </li>
+
+                  <li className="nav-item">
+                    <button
+                      onClick={handleLogout}
+                      className="btn btn-sm btn-outline-dark px-4"
+                    >
+                      Logout
+                    </button>
                   </li>
                 </>
               ) : (

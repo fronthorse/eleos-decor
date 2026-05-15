@@ -6,10 +6,46 @@ import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
 import { isAdminEmail } from "../../lib/adminAuth";
 import { getSessionSafely } from "../../lib/supabase/auth";
+import {
+  formatOrderStatus,
+  normalizeOrderStatus,
+  ORDER_STATUSES,
+} from "../../lib/orderStatuses";
+import {
+  getProductPreviewImageSrc,
+  PRODUCT_IMAGE_FALLBACK,
+} from "../../lib/productImages";
 import imageCompression from "browser-image-compression";
+
+const PRODUCT_PAGE_SIZE = 12;
+const INQUIRY_PAGE_SIZE = 10;
+
+const REVENUE_STATUS_VALUES = ["paid", "processing", "delivered"];
+
+function handlePreviewImageError(event) {
+  if (event.currentTarget.src.includes(PRODUCT_IMAGE_FALLBACK)) {
+    return;
+  }
+
+  event.currentTarget.src = PRODUCT_IMAGE_FALLBACK;
+}
 
 function createSafeFileName(fileName) {
   return `${Date.now()}-${fileName.replaceAll(" ", "-")}`;
+}
+
+function getPositivePage(value) {
+  return Number.isFinite(value) && value > 0 ? value : 1;
+}
+
+function getPaginationRange(page, pageSize) {
+  const safePage = getPositivePage(page);
+  const from = (safePage - 1) * pageSize;
+
+  return {
+    from,
+    to: from + pageSize - 1,
+  };
 }
 
 export default function AdminPage() {
@@ -22,6 +58,10 @@ export default function AdminPage() {
 
   const [products, setProducts] = useState([]);
   const [inquiries, setInquiries] = useState([]);
+  const [productPage, setProductPage] = useState(1);
+  const [productCount, setProductCount] = useState(0);
+  const [inquiryPage, setInquiryPage] = useState(1);
+  const [inquiryCount, setInquiryCount] = useState(0);
 
   const [analytics, setAnalytics] = useState({
     totalProducts: 0,
@@ -44,6 +84,16 @@ export default function AdminPage() {
   const [description, setDescription] = useState("");
   const [imageFiles, setImageFiles] = useState([]);
   const [editingProductId, setEditingProductId] = useState(null);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+
+  const productTotalPages = Math.max(
+    1,
+    Math.ceil(productCount / PRODUCT_PAGE_SIZE)
+  );
+  const inquiryTotalPages = Math.max(
+    1,
+    Math.ceil(inquiryCount / INQUIRY_PAGE_SIZE)
+  );
 
   async function checkUserSession() {
     const { session, error } = await getSessionSafely(supabase);
@@ -66,15 +116,45 @@ export default function AdminPage() {
     }
 
     setUser(session.user);
-    fetchProducts();
-    fetchAnalytics();
-    fetchInquiries();
     setCheckingAuth(false);
   }
 
   useEffect(() => {
     checkUserSession();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    fetchProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productPage, user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    fetchInquiries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inquiryPage, user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    fetchAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  useEffect(() => {
+    if (productPage > productTotalPages) {
+      setProductPage(productTotalPages);
+    }
+  }, [productPage, productTotalPages]);
+
+  useEffect(() => {
+    if (inquiryPage > inquiryTotalPages) {
+      setInquiryPage(inquiryTotalPages);
+    }
+  }, [inquiryPage, inquiryTotalPages]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -83,10 +163,15 @@ export default function AdminPage() {
   }
 
   async function fetchProducts() {
-    const { data, error } = await supabase
+    const { from, to } = getPaginationRange(productPage, PRODUCT_PAGE_SIZE);
+
+    const { data, error, count } = await supabase
       .from("products")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .select("*", {
+        count: "exact",
+      })
+      .order("created_at", { ascending: false })
+      .range(from, to);
 
     if (error) {
       toast.error(error.message);
@@ -94,13 +179,20 @@ export default function AdminPage() {
     }
 
     setProducts(data || []);
+    setProductCount(count || 0);
   }
 
   async function fetchInquiries() {
-    const { data, error } = await supabase
+    const { from, to } = getPaginationRange(inquiryPage, INQUIRY_PAGE_SIZE);
+
+    const { data, error, count } = await supabase
       .from("checkout_inquiries")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .select(
+        "id,created_at,order_number,status,customer_name,customer_phone,customer_email,delivery_address,items,total_amount",
+        { count: "exact" }
+      )
+      .order("created_at", { ascending: false })
+      .range(from, to);
 
     if (error) {
       toast.error(error.message);
@@ -108,76 +200,143 @@ export default function AdminPage() {
     }
 
     setInquiries(data || []);
+    setInquiryCount(count || 0);
   }
 
   async function fetchAnalytics() {
-    const { data: productsData } = await supabase.from("products").select("*");
-    const { data: reviewsData } = await supabase.from("reviews").select("*");
+    const { data: rpcAnalytics, error: rpcError } = await supabase.rpc(
+      "get_admin_analytics"
+    );
+    const rpcRow = Array.isArray(rpcAnalytics)
+      ? rpcAnalytics[0]
+      : rpcAnalytics;
 
-    const { data: inquiriesData } = await supabase
-      .from("checkout_inquiries")
-      .select("*");
+    if (!rpcError && rpcRow) {
+      setAnalytics({
+        totalProducts: Number(rpcRow.total_products || 0),
+        totalReviews: Number(rpcRow.total_reviews || 0),
+        averageRating: Number(rpcRow.average_rating || 0).toFixed(1),
+        totalInquiries: Number(rpcRow.total_inquiries || 0),
+        pendingInquiries: Number(rpcRow.pending_inquiries || 0),
+        contactedInquiries: Number(rpcRow.contacted_inquiries || 0),
+        paymentPendingInquiries: Number(
+          rpcRow.payment_pending_inquiries || 0
+        ),
+        processingInquiries: Number(rpcRow.processing_inquiries || 0),
+        confirmedInquiries: Number(rpcRow.confirmed_inquiries || 0),
+        fulfilledInquiries: Number(rpcRow.fulfilled_inquiries || 0),
+        cancelledInquiries: Number(rpcRow.cancelled_inquiries || 0),
+        estimatedRevenue: Number(rpcRow.estimated_revenue || 0),
+      });
+      return;
+    }
 
-    const totalProducts = productsData?.length || 0;
-    const totalReviews = reviewsData?.length || 0;
-    const totalInquiries = inquiriesData?.length || 0;
+    const countRows = async (table, applyFilters) => {
+      let query = supabase.from(table).select("id", {
+        count: "exact",
+        head: true,
+      });
 
-    const averageRating =
-      totalReviews > 0
-        ? (
-            reviewsData.reduce(
-              (sum, review) => sum + Number(review.rating || 0),
-              0
-            ) / totalReviews
-          ).toFixed(1)
-        : 0;
+      if (applyFilters) {
+        query = applyFilters(query);
+      }
 
-    const pendingInquiries =
-      inquiriesData?.filter((item) => item.status === "New").length || 0;
+      const { count, error } = await query;
 
-    const contactedInquiries =
-      inquiriesData?.filter((item) => item.status === "Contacted").length || 0;
+      if (error) {
+        throw error;
+      }
 
-    const paymentPendingInquiries =
-      inquiriesData?.filter((item) => item.status === "Payment Pending")
-        .length || 0;
+      return count || 0;
+    };
 
-    const processingInquiries =
-      inquiriesData?.filter((item) => item.status === "Processing").length || 0;
+    try {
+      const [
+        totalProducts,
+        totalInquiries,
+        pendingInquiries,
+        contactedInquiries,
+        paymentPendingInquiries,
+        processingInquiries,
+        confirmedInquiries,
+        fulfilledInquiries,
+        cancelledInquiries,
+        reviewsResult,
+        revenueResult,
+      ] = await Promise.all([
+        countRows("products"),
+        countRows("checkout_inquiries"),
+        countRows("checkout_inquiries", (query) =>
+          query.eq("status", "new")
+        ),
+        countRows("checkout_inquiries", (query) =>
+          query.eq("status", "contacted")
+        ),
+        countRows("checkout_inquiries", (query) =>
+          query.eq("status", "payment_pending")
+        ),
+        countRows("checkout_inquiries", (query) =>
+          query.eq("status", "processing")
+        ),
+        countRows("checkout_inquiries", (query) =>
+          query.eq("status", "paid")
+        ),
+        countRows("checkout_inquiries", (query) =>
+          query.eq("status", "delivered")
+        ),
+        countRows("checkout_inquiries", (query) =>
+          query.eq("status", "cancelled")
+        ),
+        supabase.from("reviews").select("rating", { count: "exact" }),
+        supabase
+          .from("checkout_inquiries")
+          .select("total_amount")
+          .in("status", REVENUE_STATUS_VALUES),
+      ]);
 
-    const confirmedInquiries =
-      inquiriesData?.filter((item) => item.status === "Paid").length || 0;
+      if (reviewsResult.error) {
+        throw reviewsResult.error;
+      }
 
-    const fulfilledInquiries =
-      inquiriesData?.filter((item) => item.status === "Delivered").length || 0;
+      if (revenueResult.error) {
+        throw revenueResult.error;
+      }
 
-    const cancelledInquiries =
-      inquiriesData?.filter((item) => item.status === "Cancelled").length || 0;
+      const reviewsData = reviewsResult.data || [];
+      const totalReviews = reviewsResult.count || 0;
+      const averageRating =
+        totalReviews > 0
+          ? (
+              reviewsData.reduce(
+                (sum, review) => sum + Number(review.rating || 0),
+                0
+              ) / totalReviews
+            ).toFixed(1)
+          : 0;
 
-    const estimatedRevenue =
-      inquiriesData
-        ?.filter(
-          (item) =>
-            item.status === "Paid" ||
-            item.status === "Processing" ||
-            item.status === "Delivered"
-        )
-        .reduce((sum, item) => sum + Number(item.total_amount || 0), 0) || 0;
+      const estimatedRevenue =
+        revenueResult.data?.reduce(
+          (sum, item) => sum + Number(item.total_amount || 0),
+          0
+        ) || 0;
 
-    setAnalytics({
-      totalProducts,
-      totalReviews,
-      averageRating,
-      totalInquiries,
-      pendingInquiries,
-      contactedInquiries,
-      paymentPendingInquiries,
-      processingInquiries,
-      confirmedInquiries,
-      fulfilledInquiries,
-      cancelledInquiries,
-      estimatedRevenue,
-    });
+      setAnalytics({
+        totalProducts,
+        totalReviews,
+        averageRating,
+        totalInquiries,
+        pendingInquiries,
+        contactedInquiries,
+        paymentPendingInquiries,
+        processingInquiries,
+        confirmedInquiries,
+        fulfilledInquiries,
+        cancelledInquiries,
+        estimatedRevenue,
+      });
+    } catch (error) {
+      toast.error(error.message);
+    }
   }
 
   async function uploadImages(files) {
@@ -287,6 +446,12 @@ export default function AdminPage() {
   async function handleUploadProduct(e) {
     e.preventDefault();
 
+    if (isSavingProduct) {
+      return;
+    }
+
+    setIsSavingProduct(true);
+
     try {
       if (editingProductId) {
         const updatedProduct = {
@@ -350,13 +515,15 @@ export default function AdminPage() {
       setActiveTab("products");
     } catch (error) {
       toast.error(error.message);
+    } finally {
+      setIsSavingProduct(false);
     }
   }
 
   async function handleUpdateInquiryStatus(id, newStatus) {
     const { error } = await supabase
       .from("checkout_inquiries")
-      .update({ status: newStatus })
+      .update({ status: normalizeOrderStatus(newStatus) })
       .eq("id", id);
 
     if (error) {
@@ -678,6 +845,7 @@ export default function AdminPage() {
                 multiple
                 onChange={(e) => setImageFiles(Array.from(e.target.files))}
                 required={!editingProductId}
+                disabled={isSavingProduct}
               />
 
               <small className="text-muted d-block mt-2">
@@ -686,8 +854,14 @@ export default function AdminPage() {
               </small>
             </div>
 
-            <button className="btn btn-dark w-100">
-              {editingProductId ? "Save Changes" : "Upload Product"}
+            <button className="btn btn-dark w-100" disabled={isSavingProduct}>
+              {isSavingProduct
+                ? editingProductId
+                  ? "Saving changes..."
+                  : "Uploading product..."
+                : editingProductId
+                ? "Save Changes"
+                : "Upload Product"}
             </button>
 
             {editingProductId && (
@@ -695,6 +869,7 @@ export default function AdminPage() {
                 type="button"
                 onClick={resetForm}
                 className="btn btn-outline-dark w-100 mt-2"
+                disabled={isSavingProduct}
               >
                 Cancel Edit
               </button>
@@ -709,18 +884,22 @@ export default function AdminPage() {
             {inquiries.length === 0 ? (
               <p className="text-muted">No orders yet.</p>
             ) : (
+              <>
+              <p className="text-muted mb-4">
+                Showing page {inquiryPage} of {inquiryTotalPages} (
+                {inquiryCount} order{inquiryCount === 1 ? "" : "s"})
+              </p>
+
               <div className="row g-4">
                 {inquiries.map((inquiry) => {
-                  const customerName =
-                    inquiry.customer_name || inquiry.full_name || "";
-                  const customerPhone =
-                    inquiry.customer_phone || inquiry.phone || "";
+                  const customerName = inquiry.customer_name || "";
+                  const customerPhone = inquiry.customer_phone || "";
                   const whatsappPhone = formatPhoneForWhatsApp(customerPhone);
 
                   const whatsappMessage = `Hello ${customerName}, thank you for your order with Eleos Decor.
 
 Order ID: ${inquiry.order_number || `Inquiry #${inquiry.id}`}
-Status: ${inquiry.status || "New"}
+Status: ${formatOrderStatus(inquiry.status)}
 
 We are contacting you regarding your order.`;
 
@@ -740,9 +919,11 @@ We are contacting you regarding your order.`;
                           </div>
 
                           <span
-                            className={`status-badge status-${inquiry.status}`}
+                            className={`status-badge status-${normalizeOrderStatus(
+                              inquiry.status
+                            )}`}
                           >
-                            {inquiry.status}
+                            {formatOrderStatus(inquiry.status)}
                           </span>
                         </div>
 
@@ -759,9 +940,7 @@ We are contacting you regarding your order.`;
 
                           <p>
                             <strong>Email:</strong>{" "}
-                            {inquiry.customer_email ||
-                              inquiry.email ||
-                              "Not provided"}
+                            {inquiry.customer_email || "Not provided"}
                           </p>
 
                           <p>
@@ -801,7 +980,7 @@ We are contacting you regarding your order.`;
 
                         <select
                           className="form-select"
-                          value={inquiry.status}
+                          value={normalizeOrderStatus(inquiry.status)}
                           onChange={(e) =>
                             handleUpdateInquiryStatus(
                               inquiry.id,
@@ -809,15 +988,11 @@ We are contacting you regarding your order.`;
                             )
                           }
                         >
-                          <option value="New">New</option>
-                          <option value="Contacted">Contacted</option>
-                          <option value="Payment Pending">
-                            Payment Pending
-                          </option>
-                          <option value="Paid">Paid</option>
-                          <option value="Processing">Processing</option>
-                          <option value="Delivered">Delivered</option>
-                          <option value="Cancelled">Cancelled</option>
+                          {ORDER_STATUSES.map((status) => (
+                            <option value={status} key={status}>
+                              {formatOrderStatus(status)}
+                            </option>
+                          ))}
                         </select>
 
                         {whatsappPhone && (
@@ -837,6 +1012,39 @@ We are contacting you regarding your order.`;
                   );
                 })}
               </div>
+
+              {inquiryTotalPages > 1 && (
+                <div className="shop-pagination">
+                  <button
+                    type="button"
+                    className="btn btn-outline-dark px-4"
+                    disabled={inquiryPage <= 1}
+                    onClick={() =>
+                      setInquiryPage((page) => Math.max(1, page - 1))
+                    }
+                  >
+                    Previous
+                  </button>
+
+                  <span>
+                    Page {inquiryPage} of {inquiryTotalPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    className="btn btn-outline-dark px-4"
+                    disabled={inquiryPage >= inquiryTotalPages}
+                    onClick={() =>
+                      setInquiryPage((page) =>
+                        Math.min(inquiryTotalPages, page + 1)
+                      )
+                    }
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+              </>
             )}
           </div>
         )}
@@ -845,17 +1053,24 @@ We are contacting you regarding your order.`;
           <div>
             <h4 className="fw-bold mb-4">Uploaded Products</h4>
 
+            <p className="text-muted mb-4">
+              Showing page {productPage} of {productTotalPages} ({productCount}{" "}
+              product{productCount === 1 ? "" : "s"})
+            </p>
+
             <div className="row g-4">
               {products.map((product) => (
                 <div className="col-md-4" key={product.id}>
                   <div className="card border-0 shadow-sm h-100">
                     <img
-                      src={product.image_url}
+                      src={getProductPreviewImageSrc(product)}
                       alt={product.title}
                       loading="lazy"
                       className="card-img-top"
+                      onError={handlePreviewImageError}
                       style={{
                         height: "220px",
+                        width: "100%",
                         objectFit: "cover",
                       }}
                     />
@@ -898,6 +1113,38 @@ We are contacting you regarding your order.`;
                 <p className="text-muted">No products uploaded yet.</p>
               )}
             </div>
+
+            {productTotalPages > 1 && (
+              <div className="shop-pagination">
+                <button
+                  type="button"
+                  className="btn btn-outline-dark px-4"
+                  disabled={productPage <= 1}
+                  onClick={() =>
+                    setProductPage((page) => Math.max(1, page - 1))
+                  }
+                >
+                  Previous
+                </button>
+
+                <span>
+                  Page {productPage} of {productTotalPages}
+                </span>
+
+                <button
+                  type="button"
+                  className="btn btn-outline-dark px-4"
+                  disabled={productPage >= productTotalPages}
+                  onClick={() =>
+                    setProductPage((page) =>
+                      Math.min(productTotalPages, page + 1)
+                    )
+                  }
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
