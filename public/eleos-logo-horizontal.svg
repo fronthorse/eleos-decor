@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="220" viewBox="0 0 900 220" role="img" aria-labelledby="title desc">
+  <title id="title">Eleos Decor horizontal logo</title>
+  <desc id="desc">A contained Eleos Decor horizontal logo for website navigation.</desc>
+  <defs>
+    <style>
+      .gold { fill: #B8955F; }
+      .ink { fill: #241F1B; }
+      .ring { fill: none; stroke: #B8955F; stroke-width: 6; }
+      .wordmark { font-family: Georgia, 'Times New Roman', serif; font-size: 72px; letter-spacing: 14px; }
+      .tagline { font-family: Arial, Helvetica, sans-serif; font-size: 15px; letter-spacing: 7px; }
+    </style>
+  </defs>
+  <circle class="ring" cx="110" cy="110" r="82"/>
+  <g class="gold" transform="translate(41 46) scale(.25)">
+    <polygon points="162,0 432,0 488,96 104,96"/>
+    <polygon points="104,104 162,204 384,204 440,300 104,300 46,202"/>
+    <polygon points="104,316 162,416 444,416 500,512 104,512 46,414"/>
+  </g>
+  <text class="wordmark ink" x="245" y="103">ELEOS</text>
+  <text class="tagline gold" x="250" y="145">INTERIORS &amp; DECOR</text>
+</svg>

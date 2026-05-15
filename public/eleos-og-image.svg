@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Eleos Decor social sharing image</title>
+  <desc id="desc">Eleos Decor brand image for search and social media previews.</desc>
+  <rect width="1200" height="630" fill="#FBF7EF"/>
+  <circle cx="600" cy="250" r="118" fill="none" stroke="#B8955F" stroke-width="10"/>
+  <g fill="#B8955F" transform="translate(512 161) scale(.32)">
+    <polygon points="162,0 432,0 488,96 104,96"/>
+    <polygon points="104,104 162,204 384,204 440,300 104,300 46,202"/>
+    <polygon points="104,316 162,416 444,416 500,512 104,512 46,414"/>
+  </g>
+  <text x="600" y="440" text-anchor="middle" fill="#241F1B" font-family="Georgia, 'Times New Roman', serif" font-size="76" letter-spacing="12">ELEOS</text>
+  <text x="600" y="505" text-anchor="middle" fill="#B8955F" font-family="Arial, Helvetica, sans-serif" font-size="24" letter-spacing="10">INTERIORS &amp; DECOR</text>
+</svg>

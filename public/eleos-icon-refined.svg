@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200" role="img" aria-labelledby="title desc">
+  <title id="title">Eleos Decor refined icon logo</title>
+  <desc id="desc">A contained icon-only Eleos Decor logo with a warm gold geometric E mark inside a circular border.</desc>
+  <circle cx="600" cy="600" r="475" fill="none" stroke="#B8955F" stroke-width="17"/>
+  <g fill="#B8955F" transform="translate(395 408) scale(.75)">
+    <polygon points="162,0 432,0 488,96 104,96"/>
+    <polygon points="104,104 162,204 384,204 440,300 104,300 46,202"/>
+    <polygon points="104,316 162,416 444,416 500,512 104,512 46,414"/>
+  </g>
+</svg>

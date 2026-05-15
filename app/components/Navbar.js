@@ -52,8 +52,12 @@ const router = useRouter();
     <>
       <nav className="navbar navbar-expand-lg bg-white fixed-top minimal-navbar">
         <div className="container">
-          <Link className="navbar-brand fw-bold" href="/">
-            Eleos Decor
+          <Link className="navbar-brand brand-logo-link" href="/" aria-label="Eleos Decor home">
+            <img
+              src="/eleos-logo-nav.svg"
+              alt="Eleos Decor"
+              className="brand-logo"
+            />
           </Link>
 
           <div className="d-flex align-items-center gap-2 order-lg-2">

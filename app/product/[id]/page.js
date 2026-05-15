@@ -6,13 +6,21 @@ import WhatsAppOrderBox from "../../components/WhatsAppOrderBox";
 import ProductReviews from "../../components/ProductReviews";
 import TrackRecentlyViewed from "../../components/TrackRecentlyViewed";
 import RecentlyViewedSection from "../../components/RecentlyViewedSection";
-import toast from "react-hot-toast";
 
 import { createClient } from "../../../lib/supabase/server";
+import {
+  DEFAULT_OG_IMAGE,
+  DEFAULT_SEO_DESCRIPTION,
+  SITE_NAME,
+  absoluteUrl,
+  getProductAvailability,
+  getProductImage,
+  normalizeDescription,
+  normalizePrice,
+} from "../../../lib/seo";
 
-export default async function ProductDetails({ params }) {
+async function getProductById(id) {
   const supabase = await createClient();
-  const { id } = await params;
 
   const { data: product, error } = await supabase
     .from("products")
@@ -21,6 +29,98 @@ export default async function ProductDetails({ params }) {
     .single();
 
   if (error || !product) {
+    return null;
+  }
+
+  return product;
+}
+
+export async function generateMetadata({ params }) {
+  const { id } = await params;
+  const product = await getProductById(id);
+  const canonicalPath = `/product/${id}`;
+
+  if (!product) {
+    return {
+      title: "Product Not Found",
+      description: DEFAULT_SEO_DESCRIPTION,
+      alternates: {
+        canonical: canonicalPath,
+      },
+      openGraph: {
+        title: "Product Not Found",
+        description: DEFAULT_SEO_DESCRIPTION,
+        url: canonicalPath,
+        images: [DEFAULT_OG_IMAGE],
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: "Product Not Found",
+        description: DEFAULT_SEO_DESCRIPTION,
+        images: [DEFAULT_OG_IMAGE],
+      },
+      robots: {
+        index: false,
+        follow: true,
+      },
+    };
+  }
+
+  const title = product.title || "Decor Product";
+  const description = normalizeDescription(product.description);
+  const image = getProductImage(product);
+  const price = normalizePrice(product.price);
+  const availability = getProductAvailability(product);
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: canonicalPath,
+    },
+    openGraph: {
+      type: "website",
+      title,
+      description,
+      url: canonicalPath,
+      siteName: SITE_NAME,
+      images: [
+        {
+          url: image,
+          width: 1200,
+          height: 630,
+          alt: title,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [image],
+    },
+    other: {
+      "product:brand": SITE_NAME,
+      "product:availability": availability.endsWith("InStock")
+        ? "in stock"
+        : "out of stock",
+      ...(price
+        ? {
+            "product:price:amount": price,
+            "product:price:currency": "NGN",
+          }
+        : {}),
+    },
+  };
+}
+
+export default async function ProductDetails({ params }) {
+  const supabase = await createClient();
+  const { id } = await params;
+
+  const product = await getProductById(id);
+
+  if (!product) {
     return (
       <>
         <Navbar />
@@ -51,9 +151,40 @@ export default async function ProductDetails({ params }) {
     .neq("id", product.id)
     .limit(3);
 
+  const productUrl = absoluteUrl(`/product/${product.id}`);
+  const productDescription = normalizeDescription(product.description);
+  const productImage = getProductImage(product);
+  const productPrice = normalizePrice(product.price);
+  const productSchema = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.title,
+    description: productDescription,
+    image: [productImage],
+    brand: {
+      "@type": "Brand",
+      name: SITE_NAME,
+    },
+    url: productUrl,
+    offers: {
+      "@type": "Offer",
+      url: productUrl,
+      priceCurrency: "NGN",
+      availability: getProductAvailability(product),
+      ...(productPrice ? { price: productPrice } : {}),
+    },
+  };
+
   return (
     <>
       <Navbar />
+
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(productSchema).replace(/</g, "\\u003c"),
+        }}
+      />
 
       <TrackRecentlyViewed product={product} />
 

@@ -7,6 +7,12 @@ import Footer from "./components/Footer";
 import Testimonials from "./components/Testimonials";
 import SocialMediaSection from "./components/SocialMediaSection";
 
+export const metadata = {
+  alternates: {
+    canonical: "/",
+  },
+};
+
 export default function Home() {
   return (
     <>

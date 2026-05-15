@@ -1139,6 +1139,19 @@ body {
   letter-spacing: 1px;
 }
 
+.brand-logo-link {
+  display: inline-flex;
+  align-items: center;
+  max-width: 190px;
+  padding: 0;
+}
+
+.brand-logo {
+  display: block;
+  width: 182px;
+  height: auto;
+}
+
 .minimal-navbar .nav-link {
   font-size: 0.95rem;
   padding: 10px 0;
@@ -1170,6 +1183,10 @@ body {
     max-width: 150px;
   }
 
+  .brand-logo {
+    width: 150px;
+  }
+
   .cart-nav-btn {
     font-size: 0.85rem;
     padding: 6px 12px;
@@ -1179,6 +1196,10 @@ body {
 @media (max-width: 420px) {
   .minimal-navbar .navbar-brand {
     font-size: 1.15rem;
+  }
+
+  .brand-logo {
+    width: 132px;
   }
 
   .cart-nav-btn {

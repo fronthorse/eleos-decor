@@ -1,6 +1,21 @@
 import Navbar from ".././components/Navbar";
 import Footer from ".././components/Footer";
 
+export const metadata = {
+  title: "About",
+  description:
+    "Learn about Eleos Decor, a Nigerian home and office decor brand curating warm, elegant, and affordable luxury decor pieces.",
+  alternates: {
+    canonical: "/about",
+  },
+  openGraph: {
+    title: "About Eleos Decor",
+    description:
+      "Learn about Eleos Decor, a Nigerian home and office decor brand curating warm, elegant, and affordable luxury decor pieces.",
+    url: "/about",
+  },
+};
+
 export default function AboutPage() {
   return (
     <>

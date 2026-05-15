@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200" role="img" aria-labelledby="title desc">
+  <title id="title">Eleos Decor refined primary logo</title>
+  <desc id="desc">A refined circular Eleos Decor logo with a warm gold geometric E mark, elegant serif wordmark, and interiors and decor tagline.</desc>
+  <defs>
+    <style>
+      .gold { fill: #B8955F; }
+      .ink { fill: #241F1B; }
+      .ring { fill: none; stroke: #B8955F; stroke-width: 17; }
+      .wordmark { font-family: Georgia, 'Times New Roman', serif; font-size: 104px; letter-spacing: 28px; }
+      .tagline { font-family: Arial, Helvetica, sans-serif; font-size: 24px; letter-spacing: 10px; }
+    </style>
+  </defs>
+  <circle class="ring" cx="600" cy="600" r="475"/>
+  <g class="gold" transform="translate(412 225) scale(.75)">
+    <polygon points="162,0 432,0 488,96 104,96"/>
+    <polygon points="104,104 162,204 384,204 440,300 104,300 46,202"/>
+    <polygon points="104,316 162,416 444,416 500,512 104,512 46,414"/>
+  </g>
+  <text class="wordmark ink" x="600" y="820" text-anchor="middle">ELEOS</text>
+  <text class="tagline gold" x="600" y="899" text-anchor="middle">INTERIORS &amp; DECOR</text>
+</svg>

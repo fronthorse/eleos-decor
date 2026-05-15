@@ -1,6 +1,21 @@
 import Navbar from ".././components/Navbar";
 import Footer from ".././components/Footer";
 
+export const metadata = {
+  title: "Contact",
+  description:
+    "Contact Eleos Decor for home and office decor orders, product availability, styling help, and nationwide delivery across Nigeria.",
+  alternates: {
+    canonical: "/contact",
+  },
+  openGraph: {
+    title: "Contact Eleos Decor",
+    description:
+      "Contact Eleos Decor for home and office decor orders, product availability, styling help, and nationwide delivery across Nigeria.",
+    url: "/contact",
+  },
+};
+
 export default function ContactPage() {
   return (
     <>
