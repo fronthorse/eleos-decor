@@ -25,6 +25,7 @@ export default async function sitemap() {
     route("/shop", { changeFrequency: "daily", priority: 0.9 }),
     route("/about", { changeFrequency: "monthly", priority: 0.6 }),
     route("/contact", { changeFrequency: "monthly", priority: 0.6 }),
+    route("/return-policy", { changeFrequency: "monthly", priority: 0.5 }),
   ];
 
   try {

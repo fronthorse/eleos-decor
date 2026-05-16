@@ -143,16 +143,24 @@ Contains React Context providers such as:
 - Product gallery support
 - Product detail/gallery images use Next Image optimization with priority main image, responsive sizes, skeleton loading, and fallback image handling
 - Product cards use Next Image and smaller Supabase transformed image URLs for thumbnails when available; product detail images remain high quality
+- Public Return & Exchange Policy page exists at /return-policy and is linked from the footer
 
 ## Production SEO
 - SEO is implemented for the live domain https://eleosdecor.com using Next.js App Router metadata APIs
 - app/layout.js defines global metadataBase set to https://eleosdecor.com, title template, default description, keyword defaults, Open Graph defaults, Twitter/X card defaults, and index/follow defaults
-- Public page metadata/canonicals exist for homepage, shop, about, and contact
+- Public page metadata/canonicals exist for homepage, shop, about, contact, and return-policy
+- Return & Exchange Policy page is public and indexable at https://eleosdecor.com/return-policy for customer trust and future Google Merchant structured data references
 - Product detail pages generate dynamic metadata from Supabase products using products.title, description, image_url/gallery fallback, price, and availability
 - Product detail pages include product canonical URLs and product Open Graph images
-- Product detail pages include Product JSON-LD with name, description, image, brand Eleos Decor, offer priceCurrency NGN, price when available, availability, and canonical URL
+- Product detail pages include Product JSON-LD with name, description, image, brand Eleos Decor, offer priceCurrency NGN, price when available, availability, canonical URL, and merchant offer details
+- Product offer JSON-LD includes shippingDetails for Nigeria with realistic broad delivery estimates: 1-3 day handling time and 2-7 day transit time; do not promise same-day delivery in schema unless operations change
+- Product offer JSON-LD includes hasMerchantReturnPolicy for Nigeria with a 7-day finite return window, ReturnByMail method, ReturnFeesCustomerResponsibility, and merchantReturnLink pointing to https://eleosdecor.com/return-policy
+- Product detail JSON-LD conditionally includes aggregateRating and review only when real Supabase review data exists for that product
+- Product aggregateRating is calculated from real reviews.rating values; reviewCount is the count of valid real ratings
+- Product review schema uses real reviews.customer_name, reviews.rating, reviews.comment, and reviews.created_at, limits embedded reviews to avoid bloated JSON-LD, and never fabricates fake ratings or placeholder reviews
+- Products without reviews must omit aggregateRating and review entirely
 - Product prices may be stored as formatted strings such as "500,000"; SEO helpers normalize them for metadata/schema without changing UI display
-- app/sitemap.js generates sitemap.xml with homepage, shop, about, contact, category query URLs from product categories, and product detail URLs from Supabase
+- app/sitemap.js generates sitemap.xml with homepage, shop, about, contact, return-policy, category query URLs from product categories, and product detail URLs from Supabase
 - Sitemap generation uses public Supabase anon access and products fields id, category, and created_at; products.updated_at is not currently part of the table
 - app/robots.js generates a simplified robots.txt with Allow: /, private-route Disallow rules, and Sitemap: https://eleosdecor.com/sitemap.xml
 - robots.txt intentionally does not include a Host directive because Google does not use it
@@ -162,8 +170,9 @@ Contains React Context providers such as:
 - SEO infrastructure is complete; Google indexing is in progress
 
 ## SEO Files
-- lib/seo.js stores production SEO constants and shared helpers
+- lib/seo.js stores production SEO constants and shared helpers, including Product review/aggregateRating JSON-LD helpers and merchant offer schema helpers for shipping and returns
 - app/layout.js defines global metadata and social preview defaults
+- app/return-policy/page.js defines the public Return & Exchange Policy page with SEO metadata and canonical URL
 - app/product/[id]/page.js defines dynamic product metadata and Product JSON-LD
 - app/sitemap.js generates sitemap.xml with static, category, and product routes
 - app/robots.js generates production robots.txt
@@ -193,7 +202,7 @@ Sitemap: https://eleosdecor.com/sitemap.xml
 - Google Search Console property has been set up for eleosdecor.com
 - Sitemap was submitted successfully
 - Google discovered 48 URLs from the sitemap at the time of setup
-- Sitemap includes homepage, shop, about, contact, category URLs, and product detail URLs
+- Sitemap includes homepage, shop, about, contact, return-policy, category URLs, and product detail URLs
 - Homepage and key pages may initially show "URL is not on Google" because indexing can take time for a new domain
 - Request Indexing should be used for homepage, shop, and important product pages
 
@@ -212,21 +221,38 @@ Sitemap: https://eleosdecor.com/sitemap.xml
 - robots/sitemap build passes with Next.js App Router
 
 ## AI Decor Assistant
-- Global floating AI assistant rendered from app/layout.js
+- Floating support widgets are rendered from app/layout.js through app/components/FloatingSupportWidgets.js
+- AI Decor Assistant and the floating WhatsApp button are visible only on public shopping/informational routes: /, /shop, /product/*, /about, and /contact
+- AI Decor Assistant and the floating WhatsApp button are hidden on admin, auth, customer, cart, checkout-sensitive, and other non-public routes through the route allowlist
 - Existing WhatsApp floating button remains separate for direct human support
+- WhatsApp floating button must remain separate and fixed; do not remove it
+- AI Decor Assistant floating button is draggable, minimizable/collapsible, and uses a subtle first-visit tooltip
+- AI Decor Assistant draggable position is stored in localStorage under eleos_ai_assistant_position and should remain stable across open/close, refresh, and navigation
+- The draggable position should only be clamped when it exceeds viewport boundaries; opening or closing the chat should not recalculate/reset the saved button position
+- The expanded chat panel is positioned relative to the minimized button so closing the panel returns the button to the same dragged position
 - Frontend-only recommendation logic for now; no OpenAI backend connected yet
 - AI Decor Assistant is product-aware and searches Supabase products
 - Detects decor spaces such as living room, dining area, TV console, bedroom, office, entryway, hallway, kitchen, apartment, and home
 - Detects budget formats such as 500k, 1m, 1,000,000 naira, and ₦250,000
 - Detects style preferences such as luxury, modern, minimal, cozy, classy, warm, simple, and elegant
+- Tracks richer guided-consultation preferences such as color palette, room size, and apartment/home/office context
 - Generates decor category recommendations and budget allocation guidance
 - Has guided decor consultation flow
 - Reuses conversation context and handles customer preference changes mid-chat
 - Supports product availability questions by searching Supabase products
 - Product search uses title, category, and description through products.search_vector/full-text RPC with fallback search logic
+- Category-specific product requests must pass a hard relevance gate before rendering product cards
+- Hard category filtering is implemented in lib/productSearch.js through filterProductsByDetectedCategory/filterProductsByCategoryRelevance
+- Strict category filters currently apply to dining sets, rugs, mirrors, frames, wall clocks, flowers, lamps/decorative lights, diffusers, and humidifiers
+- Dining set queries must never render unrelated products such as blankets, pillows, rugs, frames, flowers, mirrors, wall clocks, diffusers, humidifiers, ornaments, or general decor accessories
+- Dining set matching allows dining/dinning typo variants and dining set/table/chair/room language
+- Do not fill category result lists with generic fallback products; show only relevant products, even if the result count is low
+- If no exact dining set products remain after filtering, the assistant should say: "We don’t seem to have dining sets available right now, but I can help you explore dining-area decor or connect you on WhatsApp."
 - Product result messages render each product with title, price, and an immediate View Product button before global Shop/WhatsApp CTAs
 - Product result buttons appear directly under each product
 - Includes quick actions, typed messages, loading state, and Clear chat
+- Current quick action chips should remain: Browse products, Help me choose decor, Delivery information, How to order, Chat on WhatsApp
+- Assistant tone should stay confident, premium, concise, and helpful; avoid weak/apologetic language such as "I'm still learning"
 - Chat history persists during navigation and browser refresh
 - Guest persistence uses localStorage scoped to guest
 - Logged-in persistence uses user-scoped localStorage plus Supabase table ai_chat_sessions
@@ -352,6 +378,12 @@ Products support:
 - products use title as the product name field; there is no products.name usage in the app
 - product cards are structured to support a future thumbnail_url/thumbnailImage field
 
+Reviews support:
+- reviews are linked to products through product_id
+- reviews include customer_name, rating, comment, and created_at
+- product page UI loads reviews client-side, while product JSON-LD fetches reviews server-side for structured data
+- only real reviews should be used for visible reviews, aggregateRating, and review schema; never add fake SEO review data
+
 Profiles support:
 - delivery address
 - customer information
@@ -395,9 +427,12 @@ Performance index SQL:
 - MiniCartDrawer
 - WhatsApp checkout flow
 - WhatsApp floating button must not be removed or overlapped by AI assistant
+- AI assistant draggable position must not jump after open/close; preserve the saved minimized-button coordinates and clamp only for viewport boundaries
 - AIDecorAssistant persistence and smart recommendation logic
 - ai_chat_sessions RLS, user-scoped persistence, and auth-change handling
 - Product search helper should continue using actual products table fields
+- Category-specific assistant product cards must use the hard relevance gate in lib/productSearch.js before rendering; never pad strict category requests with unrelated fallback products
+- Dining set queries are especially sensitive: never show blankets, pillows, rugs, frames, flowers, mirrors, wall clocks, diffusers, humidifiers, ornaments, or generic accessories as dining set results
 - Shop page should not fetch all products; keep filtering/search/sort/pagination in Supabase queries
 - Full-text search RPC must preserve RLS/security invoker behavior and must not use service role keys on the client
 - Product detail main image should stay priority optimized; gallery thumbnails should remain lazy loaded
@@ -449,7 +484,7 @@ Potential future additions:
 - Saved addresses
 - Instagram feed integration
 - Payment gateway integration
-- Advanced SEO enhancements such as richer category pages, product review aggregateRating schema, and dynamic OG images
+- Advanced SEO enhancements such as richer category pages and dynamic OG images
 - Performance optimization
 - Clean remaining React hook dependency lint warnings
 - Replace remaining plain img tags with next/image where practical

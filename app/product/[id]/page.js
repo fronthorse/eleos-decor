@@ -13,7 +13,9 @@ import {
   DEFAULT_SEO_DESCRIPTION,
   SITE_NAME,
   absoluteUrl,
+  buildProductReviewSchema,
   getProductAvailability,
+  getProductOfferMerchantSchema,
   getProductImage,
   normalizeDescription,
   normalizePrice,
@@ -33,6 +35,23 @@ async function getProductById(id) {
   }
 
   return product;
+}
+
+async function getProductReviews(productId) {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("id,customer_name,rating,comment,created_at")
+    .eq("product_id", productId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.warn("Unable to fetch product reviews for JSON-LD.", error.message);
+    return [];
+  }
+
+  return data || [];
 }
 
 export async function generateMetadata({ params }) {
@@ -155,6 +174,8 @@ export default async function ProductDetails({ params }) {
   const productDescription = normalizeDescription(product.description);
   const productImage = getProductImage(product);
   const productPrice = normalizePrice(product.price);
+  const productReviews = await getProductReviews(product.id);
+  const productReviewSchema = buildProductReviewSchema(productReviews);
   const productSchema = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -172,7 +193,9 @@ export default async function ProductDetails({ params }) {
       priceCurrency: "NGN",
       availability: getProductAvailability(product),
       ...(productPrice ? { price: productPrice } : {}),
+      ...getProductOfferMerchantSchema(),
     },
+    ...productReviewSchema,
   };
 
   return (

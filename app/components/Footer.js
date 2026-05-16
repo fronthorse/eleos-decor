@@ -7,6 +7,12 @@ export default function Footer() {
         <p className="mb-0">
           Luxury interior decoration pieces for elegant living.
         </p>
+
+        <div className="mt-3">
+          <a href="/return-policy" className="text-white-50 text-decoration-none">
+            Return Policy
+          </a>
+        </div>
       </div>
     </footer>
   );
