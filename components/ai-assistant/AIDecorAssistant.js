@@ -42,11 +42,15 @@ function createAssistantMessage(reply) {
 export default function AIDecorAssistant() {
   const supabase = useMemo(() => createClient(), []);
   const messagesRef = useRef(null);
+  const conversationVersionRef = useRef(0);
+  const clearStatusTimerRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState(DEFAULT_MESSAGES);
   const [assistantMemory, setAssistantMemory] = useState(DEFAULT_ASSISTANT_MEMORY);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
+  const [isClearingChat, setIsClearingChat] = useState(false);
+  const [hasJustClearedChat, setHasJustClearedChat] = useState(false);
 
   const { clearPersistedChat } = useAIDecorChatPersistence({
     messages,
@@ -66,6 +70,14 @@ export default function AIDecorAssistant() {
 
     messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
   }, [messages, isThinking, isOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (clearStatusTimerRef.current) {
+        window.clearTimeout(clearStatusTimerRef.current);
+      }
+    };
+  }, []);
 
   async function buildReply(message) {
     const { memory, extracted } = updateConversationMemory(
@@ -153,8 +165,10 @@ export default function AIDecorAssistant() {
       return;
     }
 
+    const conversationVersion = conversationVersionRef.current;
     setIsThinking(true);
     setInput("");
+    setHasJustClearedChat(false);
     setMessages((current) => [
       ...current,
       {
@@ -166,15 +180,28 @@ export default function AIDecorAssistant() {
 
     try {
       const result = await buildReply(trimmedValue);
+
+      if (conversationVersionRef.current !== conversationVersion) {
+        return;
+      }
+
       setAssistantMemory(result.memory);
 
       window.setTimeout(() => {
+        if (conversationVersionRef.current !== conversationVersion) {
+          return;
+        }
+
         setMessages((current) => [...current, createAssistantMessage(result.reply)]);
         setIsThinking(false);
       }, 180);
     } catch (error) {
       console.warn("Unable to build AI assistant reply.", error);
       window.setTimeout(() => {
+        if (conversationVersionRef.current !== conversationVersion) {
+          return;
+        }
+
         setMessages((current) => [
           ...current,
           createAssistantMessage(buildFallbackReply(assistantMemory)),
@@ -184,9 +211,31 @@ export default function AIDecorAssistant() {
     }
   }
 
-  function clearChat() {
-    clearPersistedChat();
+  async function clearChat() {
+    if (isClearingChat) {
+      return;
+    }
+
+    conversationVersionRef.current += 1;
+    setIsClearingChat(true);
+    setHasJustClearedChat(false);
+    setIsThinking(false);
     setInput("");
+
+    try {
+      await clearPersistedChat();
+      setHasJustClearedChat(true);
+
+      if (clearStatusTimerRef.current) {
+        window.clearTimeout(clearStatusTimerRef.current);
+      }
+
+      clearStatusTimerRef.current = window.setTimeout(() => {
+        setHasJustClearedChat(false);
+      }, 1400);
+    } finally {
+      setIsClearingChat(false);
+    }
   }
 
   return (
@@ -197,6 +246,8 @@ export default function AIDecorAssistant() {
         input={input}
         setInput={setInput}
         isThinking={isThinking}
+        isClearingChat={isClearingChat}
+        hasJustClearedChat={hasJustClearedChat}
         onClose={() => setIsOpen(false)}
         onClear={clearChat}
         onSend={() => sendMessage()}

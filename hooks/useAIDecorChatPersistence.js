@@ -50,6 +50,25 @@ function removeLegacyLocalChat() {
   LEGACY_CHAT_KEYS.forEach((key) => window.localStorage.removeItem(key));
 }
 
+function removeAllScopedLocalChat() {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  const chatKeyPrefixes = LEGACY_CHAT_KEYS.map((key) => `${key}_`);
+
+  Object.keys(window.localStorage).forEach((key) => {
+    if (LEGACY_CHAT_KEYS.includes(key)) {
+      window.localStorage.removeItem(key);
+      return;
+    }
+
+    if (chatKeyPrefixes.some((prefix) => key.startsWith(prefix))) {
+      window.localStorage.removeItem(key);
+    }
+  });
+}
+
 export function loadLocalChat(
   defaultMessages,
   defaultPreferences,
@@ -172,7 +191,17 @@ export function useAIDecorChatPersistence({
   const localChatRef = useRef(null);
   const saveTimerRef = useRef(null);
   const currentUserIdRef = useRef(null);
+  const isClearingRef = useRef(false);
+  const skipNextLoadRef = useRef(false);
+  const clearVersionRef = useRef(0);
   const storageScope = user?.id ? `user_${user.id}` : "guest";
+
+  const cancelDebouncedSave = useCallback(() => {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+  }, []);
 
   const loadUserChat = useCallback(
     async (userId) => {
@@ -196,11 +225,12 @@ export function useAIDecorChatPersistence({
 
   const saveUserChat = useCallback(
     async (userId, nextMessages, nextPreferences, sessionId = activeSessionId) => {
+      const updatedAt = new Date().toISOString();
       const payload = {
         user_id: userId,
         messages: normalizeMessages(nextMessages, defaultMessages),
         preferences: nextPreferences || defaultPreferences,
-        updated_at: new Date().toISOString(),
+        updated_at: updatedAt,
       };
 
       if (sessionId) {
@@ -209,26 +239,94 @@ export function useAIDecorChatPersistence({
           .update(payload)
           .eq("id", sessionId)
           .eq("user_id", userId)
+          .lt("updated_at", updatedAt)
           .select("id")
-          .single();
+          .maybeSingle();
 
         if (error) {
           console.warn("Unable to update saved AI chat session.", error.message);
           return null;
         }
 
-        return data;
+        return data || { id: sessionId };
+      }
+
+      const { data: existingSession, error: loadError } = await supabase
+        .from("ai_chat_sessions")
+        .select("id")
+        .eq("user_id", userId)
+        .limit(1)
+        .maybeSingle();
+
+      if (loadError) {
+        console.warn("Unable to check saved AI chat session.", loadError.message);
+        return null;
+      }
+
+      if (existingSession?.id) {
+        const { data, error } = await supabase
+          .from("ai_chat_sessions")
+          .update(payload)
+          .eq("id", existingSession.id)
+          .eq("user_id", userId)
+          .lt("updated_at", updatedAt)
+          .select("id")
+          .maybeSingle();
+
+        if (error) {
+          console.warn("Unable to save AI chat session.", error.message);
+          return null;
+        }
+
+        return data || existingSession;
       }
 
       const { data, error } = await supabase
         .from("ai_chat_sessions")
-        .upsert(payload, { onConflict: "user_id" })
+        .insert(payload)
         .select("id")
-        .single();
+        .maybeSingle();
 
       if (error) {
-        console.warn("Unable to save AI chat session.", error.message);
-        return null;
+        if (error.code !== "23505") {
+          console.warn("Unable to save AI chat session.", error.message);
+          return null;
+        }
+
+        const { data: conflictedSession, error: conflictLoadError } =
+          await supabase
+            .from("ai_chat_sessions")
+            .select("id")
+            .eq("user_id", userId)
+            .limit(1)
+            .maybeSingle();
+
+        if (conflictLoadError || !conflictedSession?.id) {
+          if (conflictLoadError) {
+            console.warn(
+              "Unable to recover AI chat session save.",
+              conflictLoadError.message
+            );
+          }
+
+          return null;
+        }
+
+        const { data: recoveredSession, error: recoverError } = await supabase
+          .from("ai_chat_sessions")
+          .update(payload)
+          .eq("id", conflictedSession.id)
+          .eq("user_id", userId)
+          .lt("updated_at", updatedAt)
+          .select("id")
+          .maybeSingle();
+
+        if (recoverError) {
+          console.warn("Unable to save AI chat session.", recoverError.message);
+          return null;
+        }
+
+        return recoveredSession || conflictedSession;
       }
 
       return data;
@@ -237,22 +335,53 @@ export function useAIDecorChatPersistence({
   );
 
   const clearPersistedChat = useCallback(async () => {
+    const clearVersion = clearVersionRef.current + 1;
+    clearVersionRef.current = clearVersion;
+    isClearingRef.current = true;
+    skipNextLoadRef.current = true;
+    cancelDebouncedSave();
+
+    removeAllScopedLocalChat();
+    clearLocalChat("guest");
     clearLocalChat(storageScope);
+
+    if (user?.id) {
+      clearLocalChat(`user_${user.id}`);
+    }
+
+    localChatRef.current = {
+      messages: defaultMessages,
+      preferences: defaultPreferences,
+      isOpen,
+      updatedAt: new Date().toISOString(),
+    };
+
     setMessages(defaultMessages);
     setPreferences(defaultPreferences);
+    saveLocalChat(defaultMessages, defaultPreferences, isOpen, storageScope);
 
     if (!user) {
+      isClearingRef.current = false;
       return;
     }
 
     const saved = await saveUserChat(user.id, defaultMessages, defaultPreferences);
 
+    if (clearVersionRef.current !== clearVersion) {
+      isClearingRef.current = false;
+      return;
+    }
+
     if (saved?.id) {
       setActiveSessionId(saved.id);
     }
+
+    isClearingRef.current = false;
   }, [
+    cancelDebouncedSave,
     defaultMessages,
     defaultPreferences,
+    isOpen,
     saveUserChat,
     setMessages,
     setPreferences,
@@ -262,6 +391,12 @@ export function useAIDecorChatPersistence({
 
   useEffect(() => {
     if (!hasResolvedAuth) {
+      return;
+    }
+
+    if (skipNextLoadRef.current) {
+      skipNextLoadRef.current = false;
+      setHasLoadedLocalChat(true);
       return;
     }
 
@@ -309,6 +444,8 @@ export function useAIDecorChatPersistence({
       setUser(nextUser);
 
       if (userChanged) {
+        cancelDebouncedSave();
+        clearVersionRef.current += 1;
         setMessages(defaultMessages);
         setPreferences(defaultPreferences);
         setIsOpen(false);
@@ -324,6 +461,7 @@ export function useAIDecorChatPersistence({
   }, [
     defaultMessages,
     defaultPreferences,
+    cancelDebouncedSave,
     setIsOpen,
     setMessages,
     setPreferences,
@@ -335,12 +473,18 @@ export function useAIDecorChatPersistence({
       return;
     }
 
+    if (isClearingRef.current) {
+      setHasLoadedUserChat(true);
+      return;
+    }
+
     if (!user) {
       setHasLoadedUserChat(true);
       return;
     }
 
     let isCancelled = false;
+    const loadVersion = clearVersionRef.current;
 
     async function migrateLocalChatToUser() {
       const localChat = localChatRef.current || {
@@ -350,7 +494,7 @@ export function useAIDecorChatPersistence({
       };
       const remoteChat = await loadUserChat(user.id);
 
-      if (isCancelled) {
+      if (isCancelled || clearVersionRef.current !== loadVersion) {
         return;
       }
 
@@ -369,8 +513,16 @@ export function useAIDecorChatPersistence({
           localPreferences
         );
 
-        if (!isCancelled && saved?.id) {
+        if (
+          !isCancelled &&
+          clearVersionRef.current === loadVersion &&
+          saved?.id
+        ) {
           setActiveSessionId(saved.id);
+        }
+
+        if (isCancelled || clearVersionRef.current !== loadVersion) {
+          return;
         }
 
         setMessages(localMessages);
@@ -390,7 +542,11 @@ export function useAIDecorChatPersistence({
           remoteChat.id
         );
 
-        if (!isCancelled && saved?.id) {
+        if (
+          !isCancelled &&
+          clearVersionRef.current === loadVersion &&
+          saved?.id
+        ) {
           setActiveSessionId(saved.id);
         }
       } else {
@@ -403,12 +559,14 @@ export function useAIDecorChatPersistence({
           ...(remoteChat.preferences || {}),
         };
 
-        setMessages(remoteMessages);
-        setPreferences(remotePreferences);
-        saveLocalChat(remoteMessages, remotePreferences, isOpen, storageScope);
+        if (!isCancelled && clearVersionRef.current === loadVersion) {
+          setMessages(remoteMessages);
+          setPreferences(remotePreferences);
+          saveLocalChat(remoteMessages, remotePreferences, isOpen, storageScope);
+        }
       }
 
-      if (!isCancelled) {
+      if (!isCancelled && clearVersionRef.current === loadVersion) {
         setHasLoadedUserChat(true);
       }
     }
@@ -438,6 +596,10 @@ export function useAIDecorChatPersistence({
       return;
     }
 
+    if (isClearingRef.current) {
+      return;
+    }
+
     localChatRef.current = {
       messages,
       preferences,
@@ -452,17 +614,28 @@ export function useAIDecorChatPersistence({
       return;
     }
 
-    window.clearTimeout(saveTimerRef.current);
+    cancelDebouncedSave();
+    const saveVersion = clearVersionRef.current;
+
     saveTimerRef.current = window.setTimeout(async () => {
+      if (isClearingRef.current || clearVersionRef.current !== saveVersion) {
+        return;
+      }
+
       const saved = await saveUserChat(user.id, messages, preferences);
 
-      if (saved?.id) {
+      if (
+        !isClearingRef.current &&
+        clearVersionRef.current === saveVersion &&
+        saved?.id
+      ) {
         setActiveSessionId(saved.id);
       }
     }, 1000);
 
-    return () => window.clearTimeout(saveTimerRef.current);
+    return cancelDebouncedSave;
   }, [
+    cancelDebouncedSave,
     hasLoadedLocalChat,
     hasLoadedUserChat,
     messages,

@@ -2,6 +2,7 @@
 
 import MessageBubble from "./MessageBubble";
 import QuickActions from "./QuickActions";
+import TypingIndicator from "./TypingIndicator";
 
 export default function MessageList({ messages, onOptionSelect, isThinking, messagesRef }) {
   return (
@@ -18,6 +19,7 @@ export default function MessageList({ messages, onOptionSelect, isThinking, mess
           )}
         </div>
       ))}
+      {isThinking && <TypingIndicator />}
     </div>
   );
 }

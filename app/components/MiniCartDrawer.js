@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useCart } from "../../context/CartContext";
 import CheckoutForm from "./CheckoutForm";
 import EmptyState from "./EmptyState";
+import OrderRequestSent from "./OrderRequestSent";
 import {
   getProductPreviewImageSrc,
   PRODUCT_IMAGE_FALLBACK,
@@ -18,6 +20,7 @@ function handlePreviewImageError(event) {
 }
 
 export default function MiniCartDrawer({ isOpen, onClose }) {
+  const [sentOrderRequest, setSentOrderRequest] = useState(null);
   const {
     cartItems,
     removeFromCart,
@@ -25,6 +28,12 @@ export default function MiniCartDrawer({ isOpen, onClose }) {
     cartTotal,
     clearCart,
   } = useCart();
+
+  useEffect(() => {
+    if (cartItems.length > 0) {
+      setSentOrderRequest(null);
+    }
+  }, [cartItems.length]);
 
   return (
     <>
@@ -40,7 +49,13 @@ export default function MiniCartDrawer({ isOpen, onClose }) {
         </div>
 
         <div className="mini-cart-body">
-          {cartItems.length === 0 ? (
+          {sentOrderRequest ? (
+            <OrderRequestSent
+              orderRequest={sentOrderRequest}
+              className="order-request-card-drawer"
+              onReturnToShop={onClose}
+            />
+          ) : cartItems.length === 0 ? (
             <EmptyState
   title="Your cart is empty"
   message="Add your favorite décor pieces and checkout when ready."
@@ -104,6 +119,7 @@ export default function MiniCartDrawer({ isOpen, onClose }) {
                   cartItems={cartItems}
                   cartTotal={cartTotal}
                   compact={true}
+                  onOrderRequestSent={setSentOrderRequest}
                 />
 
                 <Link

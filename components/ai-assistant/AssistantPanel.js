@@ -9,6 +9,8 @@ export default function AssistantPanel({
   input,
   setInput,
   isThinking,
+  isClearingChat,
+  hasJustClearedChat,
   onClose,
   onClear,
   onSend,
@@ -34,8 +36,17 @@ export default function AssistantPanel({
           <p>Ask about styling, products, delivery, or ordering.</p>
         </div>
         <div className="ai-assistant-header-actions">
-          <button type="button" className="ai-assistant-clear" onClick={onClear}>
-            Clear chat
+          <button
+            type="button"
+            className="ai-assistant-clear"
+            onClick={onClear}
+            disabled={isClearingChat}
+          >
+            {isClearingChat
+              ? "Clearing..."
+              : hasJustClearedChat
+                ? "Cleared"
+                : "Clear chat"}
           </button>
           <button
             type="button"
@@ -54,12 +65,6 @@ export default function AssistantPanel({
         isThinking={isThinking}
         messagesRef={messagesRef}
       />
-
-      {isThinking && (
-        <div className="ai-assistant-typing" aria-live="polite">
-          Thinking through the best decor options...
-        </div>
-      )}
 
       <form
         className="ai-assistant-form"

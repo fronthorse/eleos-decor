@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import CheckoutForm from "../components/CheckoutForm";
 import EmptyState from "../components/EmptyState";
+import OrderRequestSent from "../components/OrderRequestSent";
 import { useCart } from "../../context/CartContext";
 import {
   getProductPreviewImageSrc,
@@ -43,57 +43,7 @@ export default function CartPage() {
           </div>
 
           {sentOrderRequest ? (
-            <div className="order-request-card mx-auto">
-              <p className="section-label">WhatsApp Checkout</p>
-              <h2 className="luxury-heading mb-3">
-                {"\u2728"} Order Request Sent
-              </h2>
-
-              <p className="text-muted mb-3">
-                Your decor request has been prepared and sent to Eleos Decor on
-                WhatsApp.
-              </p>
-
-              <div className="order-request-steps">
-                <p>Our team will:</p>
-                <ul>
-                  <li>confirm product availability</li>
-                  <li>discuss delivery details</li>
-                  <li>finalize your order</li>
-                </ul>
-              </div>
-
-              <p className="text-muted small mb-4">
-                Order ID:{" "}
-                <strong>{sentOrderRequest.orderNumber}</strong>. This request is
-                not a completed payment yet. If you closed WhatsApp
-                accidentally, you can reopen the conversation below.
-              </p>
-
-              <div className="order-request-actions">
-                <a
-                  href={sentOrderRequest.whatsappUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-success"
-                >
-                  Continue on WhatsApp
-                </a>
-
-                <Link href="/shop" className="btn btn-outline-dark">
-                  Return to Shop
-                </Link>
-
-                {sentOrderRequest.hasAccount && (
-                  <Link
-                    href="/customer/dashboard#orders"
-                    className="btn btn-dark"
-                  >
-                    View My Orders
-                  </Link>
-                )}
-              </div>
-            </div>
+            <OrderRequestSent orderRequest={sentOrderRequest} />
           ) : cartItems.length === 0 ? (
             <EmptyState
   title="Your cart is empty"

@@ -661,6 +661,11 @@ body {
   background: rgba(255, 255, 255, 0.18);
 }
 
+.ai-assistant-clear:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
 .ai-assistant-close:hover {
   background: rgba(255, 255, 255, 0.22);
   transform: rotate(6deg);
@@ -841,13 +846,49 @@ body {
   transform: none;
 }
 
-.ai-assistant-typing {
-  padding: 8px 16px 0;
-  color: #6f6f6f;
-  background: #fff;
-  border-top: 1px solid rgba(31, 31, 31, 0.07);
-  font-size: 0.78rem;
-  font-weight: 700;
+.ai-assistant-typing-bubble {
+  display: inline-flex;
+  align-items: center;
+  min-width: 64px;
+  min-height: 42px;
+  margin-bottom: 10px;
+}
+
+.ai-assistant-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ai-assistant-typing-dots span {
+  width: 7px;
+  height: 7px;
+  display: block;
+  border-radius: 50%;
+  background: #b8955f;
+  animation: aiTypingPulse 1.15s ease-in-out infinite;
+}
+
+.ai-assistant-typing-dots span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.ai-assistant-typing-dots span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes aiTypingPulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
 }
 
 .ai-assistant-quick-actions {
@@ -1429,6 +1470,12 @@ body {
   flex-wrap: wrap;
   gap: 10px;
   justify-content: center;
+}
+
+.order-request-card-drawer {
+  border-radius: 22px;
+  box-shadow: none;
+  padding: 28px 20px;
 }
 
 .customer-order-list {
