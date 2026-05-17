@@ -12,6 +12,7 @@ import {
   getProductCardImageSrc,
   PRODUCT_IMAGE_FALLBACK,
 } from "../../lib/productImages";
+import { supportsPrintVariants } from "../../lib/productVariants";
 
 export default function ProductCard({
   id,
@@ -27,6 +28,10 @@ export default function ProductCard({
   const [imageFailed, setImageFailed] = useState(false);
 
   const saved = isInWishlist(id);
+  const requiresPrintChoice = supportsPrintVariants(category);
+  const cardClassName = `product-card h-100 ${
+    requiresPrintChoice ? "product-card--frame" : ""
+  }`;
   const optimizedImage = getProductCardImageSrc(image, thumbnailImage);
   const imageSrc =
     optimizedImage && !imageFailed ? optimizedImage : PRODUCT_IMAGE_FALLBACK;
@@ -78,7 +83,7 @@ export default function ProductCard({
 
   return (
     <div className={columnClassName}>
-      <div className="product-card h-100">
+      <div className={cardClassName}>
         <Link href={`/product/${id}`} className="product-card-link">
           <div className="product-image-wrapper">
             <button
@@ -116,13 +121,19 @@ export default function ProductCard({
             </Link>
           </div>
 
-          <button
-            type="button"
-            onClick={handleAddToCart}
-            className="product-card-add"
-          >
-            Add to Cart
-          </button>
+          {requiresPrintChoice ? (
+            <Link href={`/product/${id}`} className="product-card-add">
+              Choose Print
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={handleAddToCart}
+              className="product-card-add"
+            >
+              Add to Cart
+            </button>
+          )}
         </div>
       </div>
     </div>

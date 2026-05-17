@@ -2,24 +2,85 @@
 
 import { useEffect, useState } from "react";
 import ProductCard from "./ProductCard";
+import { createClient } from "../../lib/supabase/client";
+
+const RECENTLY_VIEWED_KEY = "eleos-recently-viewed";
 
 export default function RecentlyViewedSection({ currentProductId }) {
   const [recentProducts, setRecentProducts] = useState([]);
 
   useEffect(() => {
-    let saved = [];
+    const supabase = createClient();
+    let cancelled = false;
 
-    try {
-      saved = JSON.parse(localStorage.getItem("eleos-recently-viewed")) || [];
-    } catch {
-      saved = [];
+    async function loadRecentProducts() {
+      let saved = [];
+
+      try {
+        saved = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY)) || [];
+      } catch {
+        saved = [];
+      }
+
+      const filtered = saved.filter(
+        (product) => String(product.id) !== String(currentProductId)
+      );
+
+      const savedIds = filtered.map((product) => product.id).filter(Boolean);
+
+      if (savedIds.length === 0) {
+        if (!cancelled) {
+          setRecentProducts([]);
+        }
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("products")
+        .select(
+          "id,title,category,description,price,image_url,gallery_images,thumbnail_url,thumbnail_image"
+        )
+        .in("id", savedIds);
+
+      if (cancelled) {
+        return;
+      }
+
+      if (error) {
+        setRecentProducts(filtered);
+        return;
+      }
+
+      const productsById = new Map(
+        (data || []).map((product) => [String(product.id), product])
+      );
+      const validRecentProducts = filtered
+        .map((product) => productsById.get(String(product.id)))
+        .filter(Boolean);
+      const validRecentIds = new Set(
+        validRecentProducts.map((product) => String(product.id))
+      );
+
+      setRecentProducts(validRecentProducts);
+      localStorage.setItem(
+        RECENTLY_VIEWED_KEY,
+        JSON.stringify(
+          saved
+            .filter(
+              (product) =>
+                String(product.id) === String(currentProductId) ||
+                validRecentIds.has(String(product.id))
+            )
+            .slice(0, 6)
+        )
+      );
     }
 
-    const filtered = saved.filter(
-      (product) => product.id !== currentProductId
-    );
+    loadRecentProducts();
 
-    setRecentProducts(filtered);
+    return () => {
+      cancelled = true;
+    };
   }, [currentProductId]);
 
   if (recentProducts.length === 0) return null;

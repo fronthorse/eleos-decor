@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
   getProductPreviewImageSrc,
@@ -29,6 +29,11 @@ export default function ProductGallery({ mainImage, galleryImages = [], title })
   const displayImage = failedImages[activeImage]
     ? PRODUCT_IMAGE_FALLBACK
     : activeImage;
+
+  useEffect(() => {
+    setActiveIndex(0);
+    setImageLoading(true);
+  }, [mainImage, galleryImages]);
 
   function handleImageError(imageUrl) {
     setFailedImages((current) => ({

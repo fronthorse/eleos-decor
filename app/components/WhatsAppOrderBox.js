@@ -4,12 +4,16 @@ import toast from "react-hot-toast";
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
 import { getProductPreviewImageSrc } from "../../lib/productImages";
+import { getCartItemKey, getCartVariantLabel } from "../../lib/productVariants";
 
 export default function WhatsAppOrderBox({ product }) {
   const { addToCart } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
   const saved = isInWishlist(product.id);
-  const whatsappMessage = `Hello Eleos Decor, I would like help with ${product.title}.`;
+  const selectedPrint = getCartVariantLabel(product);
+  const whatsappMessage = `Hello Eleos Decor, I would like help with ${
+    product.title
+  }.${selectedPrint ? ` Selected print: ${selectedPrint}.` : ""}`;
   const whatsappHref = `https://wa.me/2348168350533?text=${encodeURIComponent(
     whatsappMessage
   )}`;
@@ -17,9 +21,15 @@ export default function WhatsAppOrderBox({ product }) {
   function handleAddToCart() {
     addToCart({
       id: product.id,
+      product_id: product.id,
       title: product.title,
       price: product.price,
       image_url: product.image_url,
+      variant_id: product.variant_id || "",
+      variant_label: selectedPrint,
+      variant_type: product.variant_type || "",
+      variant_sku: product.variant_sku || "",
+      cart_item_key: getCartItemKey(product),
       thumbnail_url: getProductPreviewImageSrc(product),
     });
 

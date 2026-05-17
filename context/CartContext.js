@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { createClient } from "../lib/supabase/client";
 import { getSessionSafely } from "../lib/supabase/auth";
+import { getCartItemKey } from "../lib/productVariants";
 
 const CartContext = createContext();
 
@@ -84,23 +85,29 @@ useEffect(() => {
 
   function addToCart(product) {
     setCartItems((currentItems) => {
-      const existingItem = currentItems.find((item) => item.id === product.id);
+      const productKey = getCartItemKey(product);
+      const existingItem = currentItems.find(
+        (item) => getCartItemKey(item) === productKey
+      );
 
       if (existingItem) {
         return currentItems.map((item) =>
-          item.id === product.id
+          getCartItemKey(item) === productKey
             ? { ...item, quantity: item.quantity + 1 }
             : item
         );
       }
 
-      return [...currentItems, { ...product, quantity: 1 }];
+      return [
+        ...currentItems,
+        { ...product, cart_item_key: productKey, quantity: 1 },
+      ];
     });
   }
 
   function removeFromCart(id) {
     setCartItems((currentItems) =>
-      currentItems.filter((item) => item.id !== id)
+      currentItems.filter((item) => getCartItemKey(item) !== id && item.id !== id)
     );
   }
 
@@ -109,7 +116,7 @@ useEffect(() => {
 
     setCartItems((currentItems) =>
       currentItems.map((item) =>
-        item.id === id ? { ...item, quantity } : item
+        getCartItemKey(item) === id || item.id === id ? { ...item, quantity } : item
       )
     );
   }

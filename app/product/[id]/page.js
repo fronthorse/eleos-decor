@@ -1,8 +1,7 @@
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 import ProductCard from "../../components/ProductCard";
-import ProductGallery from "../../components/ProductGallery";
-import WhatsAppOrderBox from "../../components/WhatsAppOrderBox";
+import ProductPurchaseExperience from "../../components/ProductPurchaseExperience";
 import ProductReviews from "../../components/ProductReviews";
 import TrackRecentlyViewed from "../../components/TrackRecentlyViewed";
 import RecentlyViewedSection from "../../components/RecentlyViewedSection";
@@ -20,6 +19,10 @@ import {
   normalizeDescription,
   normalizePrice,
 } from "../../../lib/seo";
+import {
+  normalizeProductVariants,
+  supportsPrintVariants,
+} from "../../../lib/productVariants";
 
 const COMPLETE_LOOK_CATEGORY_MAP = {
   "dining sets": ["Scented Candles", "Flowers", "Ornaments", "Diffusers"],
@@ -152,6 +155,31 @@ async function getProductReviews(productId) {
   return data || [];
 }
 
+async function getProductVariants(product) {
+  if (!supportsPrintVariants(product)) {
+    return [];
+  }
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("product_variants")
+    .select(
+      "id,product_id,variant_label,variant_type,image_url,gallery,price_override,sku,is_default"
+    )
+    .eq("product_id", product.id)
+    .eq("variant_type", "print")
+    .order("is_default", { ascending: false })
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.warn("Unable to fetch product variants.", error.message);
+    return [];
+  }
+
+  return normalizeProductVariants(data || []);
+}
+
 export async function generateMetadata({ params }) {
   const { id } = await params;
   const product = await getProductById(id);
@@ -269,6 +297,11 @@ export default async function ProductDetails({ params }) {
     .order("created_at", { ascending: false })
     .limit(4);
   const completeLookProducts = await getCompleteLookProducts(supabase, product);
+  const productVariants = await getProductVariants(product);
+  const productForExperience = {
+    ...product,
+    stylingStory: getStylingStory(product.category),
+  };
 
   const productUrl = absoluteUrl(`/product/${product.id}`);
   const productDescription = normalizeDescription(product.description);
@@ -314,62 +347,10 @@ export default async function ProductDetails({ params }) {
       <section className="product-editorial-hero product-details-section">
         <div className="container">
           <div className="product-editorial-layout">
-            <div className="product-editorial-gallery">
-              <ProductGallery
-                mainImage={product.image_url}
-                galleryImages={product.gallery_images}
-                title={product.title}
-              />
-            </div>
-
-            <div className="product-editorial-info">
-              <p className="section-label product-editorial-kicker">
-                {product.category}
-              </p>
-
-              <h1 className="product-editorial-title">{product.title}</h1>
-
-              <p className="product-editorial-price">
-                ₦{product.price}
-              </p>
-
-              <p className="product-detail-description product-editorial-description">
-                {product.description}
-              </p>
-
-              <div className="product-style-note">
-                <span>Styling note</span>
-                <p>{getStylingStory(product.category)}</p>
-              </div>
-
-              <WhatsAppOrderBox product={product} />
-
-              <div className="product-trust-grid" aria-label="Shopping support">
-                <div>
-                  <span>Delivery</span>
-                  <strong>Nationwide delivery</strong>
-                  <p>Carefully coordinated across Nigeria.</p>
-                </div>
-
-                <div>
-                  <span>Checkout</span>
-                  <strong>WhatsApp-assisted order</strong>
-                  <p>Availability and delivery are confirmed before payment.</p>
-                </div>
-
-                <div>
-                  <span>Support</span>
-                  <strong>Decor guidance</strong>
-                  <p>Ask for styling help before you decide.</p>
-                </div>
-
-                <div>
-                  <span>Returns</span>
-                  <strong>Exchange support</strong>
-                  <p>Return guidance is available for eligible items.</p>
-                </div>
-              </div>
-            </div>
+            <ProductPurchaseExperience
+              product={productForExperience}
+              variants={productVariants}
+            />
           </div>
         </div>
       </section>

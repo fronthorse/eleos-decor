@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { getCartVariantLabel } from "../../../lib/productVariants";
 
 export async function POST(request) {
   try {
@@ -30,15 +31,18 @@ export async function POST(request) {
     } = body;
 
     const itemsHtml = items
-      .map(
-        (item) => `
+      .map((item) => {
+        const variantLabel = getCartVariantLabel(item);
+
+        return `
           <li>
             <strong>${item.title}</strong><br />
+            ${variantLabel ? `Selected Print: ${variantLabel}<br />` : ""}
             Quantity: ${item.quantity}<br />
             Price: ₦${item.price}
           </li>
-        `
-      )
+        `;
+      })
       .join("");
 
     const adminEmail = await resend.emails.send({

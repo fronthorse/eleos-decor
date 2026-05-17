@@ -11,6 +11,7 @@ import {
   getProductPreviewImageSrc,
   PRODUCT_IMAGE_FALLBACK,
 } from "../../lib/productImages";
+import { getCartItemKey, getCartVariantLabel } from "../../lib/productVariants";
 
 function handlePreviewImageError(event) {
   if (event.currentTarget.src.includes(PRODUCT_IMAGE_FALLBACK)) {
@@ -54,8 +55,12 @@ export default function CartPage() {
           ) : (
             <div className="row g-5">
               <div className="col-lg-8">
-                {cartItems.map((item) => (
-                  <div key={item.id} className="soft-card p-3 mb-4">
+                {cartItems.map((item) => {
+                  const itemKey = item.cart_item_key || getCartItemKey(item);
+                  const variantLabel = getCartVariantLabel(item);
+
+                  return (
+                  <div key={itemKey} className="soft-card p-3 mb-4">
                     <div className="row align-items-center g-3">
                       <div className="col-md-3">
                         <img
@@ -78,6 +83,11 @@ export default function CartPage() {
                         <p className="text-muted mb-0">
                           ₦{item.price}
                         </p>
+                        {variantLabel && (
+                          <p className="cart-variant-label">
+                            Print: {variantLabel}
+                          </p>
+                        )}
                       </div>
 
                       <div className="col-md-2">
@@ -88,7 +98,7 @@ export default function CartPage() {
                           value={item.quantity}
                           onChange={(e) =>
                             updateQuantity(
-                              item.id,
+                              itemKey,
                               Number(e.target.value)
                             )
                           }
@@ -97,7 +107,7 @@ export default function CartPage() {
 
                       <div className="col-md-2">
                         <button
-                          onClick={() => removeFromCart(item.id)}
+                          onClick={() => removeFromCart(itemKey)}
                           className="btn btn-outline-danger w-100"
                         >
                           Remove
@@ -105,7 +115,8 @@ export default function CartPage() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="col-lg-4">

@@ -138,11 +138,13 @@ Contains React Context providers such as:
 - Empty shop searches use normal paginated product fetch; non-empty searches use full-text RPC with ilike fallback
 - Category filtering
 - Wishlist system
-- Recently viewed products
+- Recently viewed products; recently viewed entries are revalidated against Supabase before rendering so deleted products are pruned from localStorage and do not lead customers to product-not-found pages
 - Image zoom
 - Product gallery support
 - Product detail/gallery images use Next Image optimization with priority main image, responsive sizes, skeleton loading, and fallback image handling
 - Product cards use Next Image and smaller Supabase transformed image URLs for thumbnails when available; product detail images remain high quality
+- Wall frame products support first-phase print variants through one canonical product page; variants are shown as "Choose Print" options such as Print A, Print B, and Print C rather than separate duplicate products
+- Shop/search/filter/pagination still operate on parent products only; do not fetch all variants globally or create duplicate shop/SEO entries per print
 - Public Return & Exchange Policy page exists at /return-policy and is linked from the footer
 
 ## Production SEO
@@ -152,6 +154,7 @@ Contains React Context providers such as:
 - Return & Exchange Policy page is public and indexable at https://eleosdecor.com/return-policy for customer trust and future Google Merchant structured data references
 - Product detail pages generate dynamic metadata from Supabase products using products.title, description, image_url/gallery fallback, price, and availability
 - Product detail pages include product canonical URLs and product Open Graph images
+- Product variants must stay within the canonical parent product URL, for example /product/[id]; do not create /print-a, /print-b, or other variant-specific indexed URLs
 - Product detail pages include Product JSON-LD with name, description, image, brand Eleos Decor, offer priceCurrency NGN, price when available, availability, canonical URL, and merchant offer details
 - Product offer JSON-LD includes shippingDetails for Nigeria with realistic broad delivery estimates: 1-3 day handling time and 2-7 day transit time; do not promise same-day delivery in schema unless operations change
 - Product offer JSON-LD includes hasMerchantReturnPolicy for Nigeria with a 7-day finite return window, ReturnByMail method, ReturnFeesCustomerResponsibility, and merchantReturnLink pointing to https://eleosdecor.com/return-policy
@@ -266,6 +269,8 @@ Sitemap: https://eleosdecor.com/sitemap.xml
 - Toast notifications
 - WhatsApp checkout flow
 - Checkout autofill from user profile
+- Cart items preserve selected frame print variants using product id plus variant id as the line-item identity, so the same product with different prints becomes separate cart lines
+- MiniCartDrawer, cart page, checkout inquiry payloads, admin order item display, checkout email, and WhatsApp messages should clearly show selected prints such as "Print: Print B" or "Selected Print: Print B"
 - Checkout inquiries store canonical lowercase status values such as new, payment_pending, paid, processing, delivered, and cancelled
 - Checkout is WhatsApp-assisted commerce, not an automatic payment-complete flow
 - After a checkout inquiry is saved and WhatsApp is triggered, customers see an Order Request Sent confirmation explaining that Eleos Decor will confirm availability, delivery, and final order details on WhatsApp
@@ -288,6 +293,9 @@ Sitemap: https://eleosdecor.com/sitemap.xml
 - Product upload
 - Edit/delete products
 - Gallery management
+- Admin product management supports first-phase frame print variants only; variants are added under frame products with label, image, optional gallery, optional price override, optional SKU, and default print flag
+- Admin product list is intentionally compact and operational: thumbnail, title, category, price, image count, variant count, and quick Edit/Delete actions
+- Admin upload/edit form is grouped into Basic Info, Pricing & Category, Images, and Variants sections; keep it compact and practical rather than storefront-styled
 - Inquiry management
 - Analytics dashboard
 - Product upload/edit disables submit controls while saving and shows toast confirmation to prevent duplicate submissions
@@ -357,6 +365,7 @@ Always:
 ## Supabase Tables
 Known tables include:
 - products
+- product_variants
 - profiles
 - reviews
 - wishlist
@@ -377,6 +386,17 @@ Products support:
 - GIN full-text index on search_vector
 - products use title as the product name field; there is no products.name usage in the app
 - product cards are structured to support a future thumbnail_url/thumbnailImage field
+
+Product variants support:
+- product_variants is the first phase of variants and is scoped to wall frames only for now
+- product_variants.id is uuid
+- product_variants.product_id is bigint and references products.id; products.id is bigint, not uuid
+- product_variants fields include product_id, variant_label, variant_type, image_url, gallery jsonb, price_override, sku, is_default, and created_at
+- variant_type is currently "print"; expected labels are Print A, Print B, Print C, etc.
+- price_override is nullable; product pages and cart should fall back to the parent product price when price_override is empty
+- product_variants.gallery stores optional extra images for the selected print
+- Keep one canonical product route for all variants; variants should not appear as separate products in sitemap, shop listing, product search, or SEO metadata
+- Variant fetching should happen only where needed, such as the product detail page and admin product management; do not globally fetch all variants client-side
 
 Reviews support:
 - reviews are linked to products through product_id
@@ -417,6 +437,7 @@ Performance index SQL:
 - supabase/product-full-text-search.sql adds products.search_vector, products_search_vector_idx, and search_products RPC
 - supabase/admin-analytics.sql adds get_admin_analytics RPC
 - supabase/order-status-normalization.sql safely converts legacy status labels to canonical lowercase status values
+- supabase/product-variants.sql defines product_variants; ensure product_id remains bigint if revisiting this migration
 
 ---
 
@@ -426,6 +447,8 @@ Performance index SQL:
 - CheckoutForm
 - MiniCartDrawer
 - WhatsApp checkout flow
+- Frame variant cart behavior: preserve selected variant id/label through add-to-cart, localStorage cart persistence, saved_carts, MiniCartDrawer, cart page, checkout inquiries, admin orders, emails, and WhatsApp messages
+- Variant IDs are uuid but parent product IDs are bigint; do not normalize product_variants.product_id as uuid/string in database writes or Supabase filters
 - WhatsApp floating button must not be removed or overlapped by AI assistant
 - AI assistant draggable position must not jump after open/close; preserve the saved minimized-button coordinates and clamp only for viewport boundaries
 - AIDecorAssistant persistence and smart recommendation logic
@@ -436,6 +459,8 @@ Performance index SQL:
 - Shop page should not fetch all products; keep filtering/search/sort/pagination in Supabase queries
 - Full-text search RPC must preserve RLS/security invoker behavior and must not use service role keys on the client
 - Product detail main image should stay priority optimized; gallery thumbnails should remain lazy loaded
+- Product detail variant selector should only appear when variants exist; products without variants must keep the existing product detail/cart behavior
+- Recently viewed should revalidate localStorage entries against products before rendering so deleted products are removed quietly
 - Supabase storage image URLs are configured in next.config.mjs remotePatterns
 - next.config.mjs also allows Supabase transformed image URLs under /storage/v1/render/image/public/**
 - SEO sitemap queries should avoid products.updated_at unless that column is added to Supabase
@@ -474,6 +499,7 @@ Purpose:
 
 Potential future additions:
 - Delivery fee/location system
+- Later product variant phases for additional product types, variant inventory, dimensions/sizes, variant-specific thumbnails, and stricter admin-only RLS policies
 - Security/stability audit
 - Email notifications
 - Homepage trust/brand sections

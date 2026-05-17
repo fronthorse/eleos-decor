@@ -5,6 +5,7 @@ import { createClient } from "../../lib/supabase/client";
 import { getSessionSafely } from "../../lib/supabase/auth";
 import { useCart } from "../../context/CartContext";
 import { normalizeOrderStatus } from "../../lib/orderStatuses";
+import { getCartVariantLabel } from "../../lib/productVariants";
 
 function generateOrderNumber() {
   return `ELEOS-${Date.now()}`;
@@ -98,11 +99,12 @@ export default function CheckoutForm({
 ${cartItems
   .map((item, index) => {
     const itemPrice = cleanPrice(item.price);
+    const variantLabel = getCartVariantLabel(item);
 
     return `
 ${index + 1}. ${item.title}
 
-Quantity: ${item.quantity}
+${variantLabel ? `Selected Print: ${variantLabel}\n` : ""}Quantity: ${item.quantity}
 Price: ₦${itemPrice.toLocaleString()}
 `;
   })

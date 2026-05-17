@@ -10,6 +10,7 @@ import {
   getProductPreviewImageSrc,
   PRODUCT_IMAGE_FALLBACK,
 } from "../../lib/productImages";
+import { getCartItemKey, getCartVariantLabel } from "../../lib/productVariants";
 
 function handlePreviewImageError(event) {
   if (event.currentTarget.src.includes(PRODUCT_IMAGE_FALLBACK)) {
@@ -65,9 +66,13 @@ export default function MiniCartDrawer({ isOpen, onClose }) {
           ) : (
             <>
               <div className="mini-cart-items">
-                {cartItems.map((item) => (
+                {cartItems.map((item) => {
+                  const itemKey = item.cart_item_key || getCartItemKey(item);
+                  const variantLabel = getCartVariantLabel(item);
+
+                  return (
                   <div
-                    key={item.id}
+                    key={itemKey}
                     className="mini-cart-item d-flex gap-3 mb-4"
                   >
                     <img
@@ -84,6 +89,12 @@ export default function MiniCartDrawer({ isOpen, onClose }) {
 
                       <p className="text-muted small mb-2">₦{item.price}</p>
 
+                      {variantLabel && (
+                        <p className="cart-variant-label">
+                          Print: {variantLabel}
+                        </p>
+                      )}
+
                       <input
                         type="number"
                         min="1"
@@ -91,19 +102,20 @@ export default function MiniCartDrawer({ isOpen, onClose }) {
                         style={{ width: "80px" }}
                         value={item.quantity}
                         onChange={(e) =>
-                          updateQuantity(item.id, Number(e.target.value))
+                          updateQuantity(itemKey, Number(e.target.value))
                         }
                       />
                     </div>
 
                     <button
-                      onClick={() => removeFromCart(item.id)}
+                      onClick={() => removeFromCart(itemKey)}
                       className="btn btn-sm btn-outline-danger"
                     >
                       ×
                     </button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="mini-cart-footer border-top pt-4 mt-4">

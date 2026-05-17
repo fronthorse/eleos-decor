@@ -66,7 +66,10 @@ const inspirationCards = [
 
 export function ShopBySpaceEditorial() {
   return (
-    <section className="home-editorial-section home-shop-by-space">
+    <section
+      id="shop-by-space"
+      className="home-editorial-section home-shop-by-space"
+    >
       <div className="container">
         <div className="home-section-header">
           <p className="home-kicker">Shop by Space</p>

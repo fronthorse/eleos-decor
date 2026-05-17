@@ -16,6 +16,10 @@ import {
   getProductPreviewImageSrc,
   PRODUCT_IMAGE_FALLBACK,
 } from "../../lib/productImages";
+import {
+  getCartVariantLabel,
+  supportsPrintVariants,
+} from "../../lib/productVariants";
 import imageCompression from "browser-image-compression";
 
 const PRODUCT_PAGE_SIZE = 12;
@@ -49,6 +53,18 @@ function getPaginationRange(page, pageSize) {
   };
 }
 
+function createVariantDraft(label = "") {
+  return {
+    clientId: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    variant_label: label,
+    price_override: "",
+    sku: "",
+    is_default: false,
+    imageFiles: [],
+    galleryFiles: [],
+  };
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -59,6 +75,7 @@ export default function AdminPage() {
 
   const [products, setProducts] = useState([]);
   const [inquiries, setInquiries] = useState([]);
+  const [productVariantCounts, setProductVariantCounts] = useState({});
   const [productPage, setProductPage] = useState(1);
   const [productCount, setProductCount] = useState(0);
   const [inquiryPage, setInquiryPage] = useState(1);
@@ -84,6 +101,10 @@ export default function AdminPage() {
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
   const [imageFiles, setImageFiles] = useState([]);
+  const [variantDrafts, setVariantDrafts] = useState([
+    createVariantDraft("Print A"),
+  ]);
+  const [existingVariants, setExistingVariants] = useState([]);
   const [editingProductId, setEditingProductId] = useState(null);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
 
@@ -181,6 +202,30 @@ export default function AdminPage() {
 
     setProducts(data || []);
     setProductCount(count || 0);
+
+    const productIds = (data || []).map((product) => product.id);
+
+    if (productIds.length === 0) {
+      setProductVariantCounts({});
+      return;
+    }
+
+    const { data: variants, error: variantError } = await supabase
+      .from("product_variants")
+      .select("product_id")
+      .in("product_id", productIds);
+
+    if (variantError) {
+      setProductVariantCounts({});
+      return;
+    }
+
+    setProductVariantCounts(
+      (variants || []).reduce((counts, variant) => {
+        counts[variant.product_id] = (counts[variant.product_id] || 0) + 1;
+        return counts;
+      }, {})
+    );
   }
 
   async function fetchInquiries() {
@@ -370,6 +415,111 @@ export default function AdminPage() {
     return uploadedImageUrls;
   }
 
+  function updateVariantDraft(clientId, updates) {
+    setVariantDrafts((currentDrafts) =>
+      currentDrafts.map((draft) =>
+        draft.clientId === clientId
+          ? { ...draft, ...updates }
+          : updates.is_default
+          ? { ...draft, is_default: false }
+          : draft
+      )
+    );
+  }
+
+  function addVariantDraft() {
+    const nextLetter = String.fromCharCode(65 + variantDrafts.length);
+    setVariantDrafts((currentDrafts) => [
+      ...currentDrafts,
+      createVariantDraft(`Print ${nextLetter}`),
+    ]);
+  }
+
+  function removeVariantDraft(clientId) {
+    setVariantDrafts((currentDrafts) =>
+      currentDrafts.filter((draft) => draft.clientId !== clientId)
+    );
+  }
+
+  async function saveProductVariants(productId) {
+    if (!supportsPrintVariants(category)) {
+      return;
+    }
+
+    const variantsToCreate = variantDrafts.filter(
+      (variant) =>
+        variant.variant_label.trim() &&
+        variant.imageFiles &&
+        variant.imageFiles.length > 0
+    );
+
+    if (variantsToCreate.length === 0) {
+      return;
+    }
+
+    const variantRows = [];
+
+    for (const variant of variantsToCreate) {
+      const uploadedImages = await uploadImages([
+        ...variant.imageFiles,
+        ...variant.galleryFiles,
+      ]);
+
+      variantRows.push({
+        product_id: productId,
+        variant_label: variant.variant_label.trim(),
+        variant_type: "print",
+        image_url: uploadedImages[0],
+        gallery: uploadedImages.slice(1),
+        price_override: variant.price_override.trim() || null,
+        sku: variant.sku.trim() || null,
+        is_default:
+          variant.is_default ||
+          (existingVariants.length === 0 && variantRows.length === 0),
+      });
+    }
+
+    const hasNewDefault = variantRows.some((variant) => variant.is_default);
+
+    if (hasNewDefault) {
+      const { error: defaultError } = await supabase
+        .from("product_variants")
+        .update({ is_default: false })
+        .eq("product_id", productId);
+
+      if (defaultError) {
+        throw new Error(defaultError.message);
+      }
+    }
+
+    const { error } = await supabase.from("product_variants").insert(variantRows);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  async function handleDeleteVariant(variantId) {
+    const confirmed = window.confirm("Delete this print variant?");
+
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from("product_variants")
+      .delete()
+      .eq("id", variantId);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    setExistingVariants((variants) =>
+      variants.filter((variant) => variant.id !== variantId)
+    );
+    toast.success("Variant deleted.");
+  }
+
   function generateDescription() {
     if (!title || !category) {
       toast.error("Please enter product title and category first.");
@@ -389,15 +539,39 @@ export default function AdminPage() {
     setPrice("");
     setDescription("");
     setImageFiles([]);
+    setVariantDrafts([createVariantDraft("Print A")]);
+    setExistingVariants([]);
   }
 
-  function handleEditProduct(product) {
+  async function fetchProductVariants(productId) {
+    const { data, error } = await supabase
+      .from("product_variants")
+      .select(
+        "id,product_id,variant_label,variant_type,image_url,gallery,price_override,sku,is_default"
+      )
+      .eq("product_id", productId)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      toast.error(error.message);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async function handleEditProduct(product) {
     setEditingProductId(product.id);
     setTitle(product.title || "");
     setCategory(product.category || "Frames");
     setPrice(product.price || "");
     setDescription(product.description || "");
     setImageFiles([]);
+    setExistingVariants(
+      supportsPrintVariants(product) ? await fetchProductVariants(product.id) : []
+    );
+    setVariantDrafts([createVariantDraft("Print A")]);
     setActiveTab("upload");
     toast.success("Editing product.");
   }
@@ -478,6 +652,7 @@ export default function AdminPage() {
           return;
         }
 
+        await saveProductVariants(editingProductId);
         resetForm();
         toast.success("Product updated successfully.");
         fetchProducts();
@@ -493,22 +668,27 @@ export default function AdminPage() {
 
       const uploadedImageUrls = await uploadImages(imageFiles);
 
-      const { error } = await supabase.from("products").insert([
-        {
-          title,
-          category,
-          price,
-          description,
-          image_url: uploadedImageUrls[0],
-          gallery_images: uploadedImageUrls,
-        },
-      ]);
+      const { data: insertedProduct, error } = await supabase
+        .from("products")
+        .insert([
+          {
+            title,
+            category,
+            price,
+            description,
+            image_url: uploadedImageUrls[0],
+            gallery_images: uploadedImageUrls,
+          },
+        ])
+        .select("id")
+        .single();
 
       if (error) {
         toast.error(error.message);
         return;
       }
 
+      await saveProductVariants(insertedProduct.id);
       resetForm();
       toast.success("Product uploaded successfully.");
       fetchProducts();
@@ -749,70 +929,48 @@ export default function AdminPage() {
         {activeTab === "upload" && (
           <form
             onSubmit={handleUploadProduct}
-            className="bg-white p-4 rounded shadow-sm"
-            style={{ maxWidth: "700px" }}
+            className="admin-product-form"
           >
-            <h4 className="fw-bold mb-4">
-              {editingProductId ? "Edit Product" : "Upload New Product"}
-            </h4>
+            <div className="admin-form-header">
+              <div>
+                <p className="section-label mb-1">Product Management</p>
+                <h4 className="fw-bold mb-0">
+                  {editingProductId ? "Edit Product" : "Upload New Product"}
+                </h4>
+              </div>
 
-            <div className="mb-3">
-              <label className="form-label">Product Title</label>
-              <input
-                type="text"
-                className="form-control"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-              />
+              {editingProductId && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="btn btn-outline-dark btn-sm"
+                  disabled={isSavingProduct}
+                >
+                  Cancel
+                </button>
+              )}
             </div>
 
-            <div className="mb-3">
-              <label className="form-label">Category</label>
-              <select
-                className="form-select"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                required
-              >
-                <option>Frames</option>
-                <option>Mirrors</option>
-                <option>Wall Clocks</option>
-                <option>Wall Art</option>
-                <option>Rugs</option>
-                <option>Throw Pillows</option>
-                <option>Throw Blankets</option>
-                <option>Bedsheets</option>
-                <option>Tables</option>
-                <option>Chairs</option>
-                <option>Dining Sets</option>
-                <option>Ornaments</option>
-                <option>Figurines</option>
-                <option>Faux Books</option>
-                <option>Lighting</option>
-                <option>Diffusers</option>
-                <option>Humidifiers</option>
-                <option>Scented Candles</option>
-                <option>Plants</option>
-                <option>Flowers</option>
-                <option>Artificial Water Fountains</option>
-              </select>
-            </div>
+            <div className="admin-form-section">
+              <div className="admin-form-section-heading">
+                <h5>Basic Info</h5>
+                <span>Customer-facing product details</span>
+              </div>
 
-            <div className="mb-3">
-              <label className="form-label">Price</label>
-              <input
-                type="text"
-                className="form-control"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                required
-              />
-            </div>
+              <div className="mb-3">
+                <label className="form-label">Product Title</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  required
+                />
+              </div>
 
-            <div className="mb-3">
-              <div className="d-flex justify-content-between align-items-center mb-2">
-                <label className="form-label mb-0">Description</label>
+              <div className="mb-0">
+                <div className="d-flex justify-content-between align-items-center mb-2 gap-2">
+                  <label className="form-label mb-0">Description</label>
 
                 <button
                   type="button"
@@ -831,8 +989,66 @@ export default function AdminPage() {
                 required
               ></textarea>
             </div>
+            </div>
 
-            <div className="mb-4">
+            <div className="admin-form-section">
+              <div className="admin-form-section-heading">
+                <h5>Pricing & Category</h5>
+                <span>Controls shop filtering and display price</span>
+              </div>
+
+              <div className="row g-3">
+                <div className="col-md-7">
+                  <label className="form-label">Category</label>
+                  <select
+                    className="form-select"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    required
+                  >
+                    <option>Frames</option>
+                    <option>Mirrors</option>
+                    <option>Wall Clocks</option>
+                    <option>Wall Art</option>
+                    <option>Rugs</option>
+                    <option>Throw Pillows</option>
+                    <option>Throw Blankets</option>
+                    <option>Bedsheets</option>
+                    <option>Tables</option>
+                    <option>Chairs</option>
+                    <option>Dining Sets</option>
+                    <option>Ornaments</option>
+                    <option>Figurines</option>
+                    <option>Faux Books</option>
+                    <option>Lighting</option>
+                    <option>Diffusers</option>
+                    <option>Humidifiers</option>
+                    <option>Scented Candles</option>
+                    <option>Plants</option>
+                    <option>Flowers</option>
+                    <option>Artificial Water Fountains</option>
+                  </select>
+                </div>
+
+                <div className="col-md-5">
+                  <label className="form-label">Price</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="admin-form-section">
+              <div className="admin-form-section-heading">
+                <h5>Images</h5>
+                <span>First image becomes the main product image</span>
+              </div>
+
               <label className="form-label">
                 {editingProductId
                   ? "Replace Product Images (Optional)"
@@ -848,33 +1064,188 @@ export default function AdminPage() {
                 required={!editingProductId}
                 disabled={isSavingProduct}
               />
-
-              <small className="text-muted d-block mt-2">
-                Hold CTRL to select multiple images. The first image becomes the
-                main product image.
-              </small>
             </div>
 
-            <button className="btn btn-dark w-100" disabled={isSavingProduct}>
-              {isSavingProduct
-                ? editingProductId
-                  ? "Saving changes..."
-                  : "Uploading product..."
-                : editingProductId
-                ? "Save Changes"
-                : "Upload Product"}
-            </button>
+            {supportsPrintVariants(category) && (
+              <div className="admin-form-section admin-variant-panel">
+                <div className="d-flex justify-content-between align-items-center mb-3">
+                  <div>
+                    <h5 className="fw-bold mb-1">Frame Print Variants</h5>
+                    <p className="text-muted small mb-0">
+                      Add Print A / Print B / Print C options under this one
+                      frame product.
+                    </p>
+                  </div>
 
-            {editingProductId && (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="btn btn-outline-dark w-100 mt-2"
-                disabled={isSavingProduct}
-              >
-                Cancel Edit
-              </button>
+                  <button
+                    type="button"
+                    onClick={addVariantDraft}
+                    className="btn btn-sm btn-outline-dark"
+                    disabled={isSavingProduct}
+                  >
+                    Add Print
+                  </button>
+                </div>
+
+                {existingVariants.length > 0 && (
+                  <div className="admin-existing-variants mb-3">
+                    {existingVariants.map((variant) => (
+                      <div className="admin-existing-variant" key={variant.id}>
+                        <img
+                          src={getProductPreviewImageSrc(variant)}
+                          alt={variant.variant_label}
+                          loading="lazy"
+                          onError={handlePreviewImageError}
+                        />
+
+                        <div>
+                          <strong>{variant.variant_label}</strong>
+                          <p className="text-muted small mb-0">
+                            {variant.is_default ? "Default print" : "Print"}
+                            {variant.price_override
+                              ? ` · ₦${variant.price_override}`
+                              : ""}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteVariant(variant.id)}
+                          className="btn btn-sm btn-outline-danger"
+                          disabled={isSavingProduct}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {variantDrafts.map((variant, index) => (
+                  <div className="admin-variant-draft" key={variant.clientId}>
+                    <div className="row g-3">
+                      <div className="col-md-6">
+                        <label className="form-label">Variant Label</label>
+                        <input
+                          className="form-control"
+                          value={variant.variant_label}
+                          onChange={(e) =>
+                            updateVariantDraft(variant.clientId, {
+                              variant_label: e.target.value,
+                            })
+                          }
+                          placeholder={`Print ${String.fromCharCode(65 + index)}`}
+                        />
+                      </div>
+
+                      <div className="col-md-6">
+                        <label className="form-label">
+                          Price Override (Optional)
+                        </label>
+                        <input
+                          className="form-control"
+                          value={variant.price_override}
+                          onChange={(e) =>
+                            updateVariantDraft(variant.clientId, {
+                              price_override: e.target.value,
+                            })
+                          }
+                          placeholder="Leave blank to use product price"
+                        />
+                      </div>
+
+                      <div className="col-md-6">
+                        <label className="form-label">Variant Image</label>
+                        <input
+                          type="file"
+                          className="form-control"
+                          accept="image/*"
+                          onChange={(e) =>
+                            updateVariantDraft(variant.clientId, {
+                              imageFiles: Array.from(e.target.files),
+                            })
+                          }
+                          disabled={isSavingProduct}
+                        />
+                      </div>
+
+                      <div className="col-md-6">
+                        <label className="form-label">
+                          Variant Gallery (Optional)
+                        </label>
+                        <input
+                          type="file"
+                          className="form-control"
+                          accept="image/*"
+                          multiple
+                          onChange={(e) =>
+                            updateVariantDraft(variant.clientId, {
+                              galleryFiles: Array.from(e.target.files),
+                            })
+                          }
+                          disabled={isSavingProduct}
+                        />
+                      </div>
+
+                      <div className="col-md-8">
+                        <label className="form-label">SKU (Optional)</label>
+                        <input
+                          className="form-control"
+                          value={variant.sku}
+                          onChange={(e) =>
+                            updateVariantDraft(variant.clientId, {
+                              sku: e.target.value,
+                            })
+                          }
+                          placeholder="Internal reference"
+                        />
+                      </div>
+
+                      <div className="col-md-4 d-flex align-items-end">
+                        <label className="form-check mb-2">
+                          <input
+                            type="checkbox"
+                            className="form-check-input"
+                            checked={variant.is_default}
+                            onChange={(e) =>
+                              updateVariantDraft(variant.clientId, {
+                                is_default: e.target.checked,
+                              })
+                            }
+                          />
+                          <span className="form-check-label">
+                            Default print
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {variantDrafts.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeVariantDraft(variant.clientId)}
+                        className="btn btn-sm btn-outline-danger mt-3"
+                        disabled={isSavingProduct}
+                      >
+                        Remove Print Row
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
+
+            <div className="admin-form-actions">
+              <button className="btn btn-dark" disabled={isSavingProduct}>
+                {isSavingProduct
+                  ? editingProductId
+                    ? "Saving changes..."
+                    : "Uploading product..."
+                  : editingProductId
+                  ? "Save Changes"
+                  : "Upload Product"}
+              </button>
+            </div>
           </form>
         )}
 
@@ -964,18 +1335,27 @@ We are contacting you regarding your order.`;
                         <div className="mb-3">
                           <h6 className="fw-bold">Items</h6>
 
-                          {inquiry.items?.map((item, index) => (
+                          {inquiry.items?.map((item, index) => {
+                            const variantLabel = getCartVariantLabel(item);
+
+                            return (
                             <div
                               key={index}
                               className="d-flex justify-content-between border-bottom py-2"
                             >
                               <span>
                                 {item.title} × {item.quantity}
+                                {variantLabel && (
+                                  <small className="d-block text-muted">
+                                    Print: {variantLabel}
+                                  </small>
+                                )}
                               </span>
 
                               <span>₦{item.price}</span>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
 
                         <div className="d-flex justify-content-between fw-bold mb-3">
@@ -1063,64 +1443,72 @@ We are contacting you regarding your order.`;
         )}
 
         {activeTab === "products" && (
-          <div>
-            <h4 className="fw-bold mb-4">Uploaded Products</h4>
+          <div className="admin-products-panel">
+            <div className="admin-list-header">
+              <div>
+                <h4 className="fw-bold mb-1">Uploaded Products</h4>
 
-            <p className="text-muted mb-4">
-              Showing page {productPage} of {productTotalPages} ({productCount}{" "}
-              product{productCount === 1 ? "" : "s"})
-            </p>
+                <p className="text-muted mb-0">
+              Page {productPage} of {productTotalPages} · {productCount}{" "}
+              product{productCount === 1 ? "" : "s"}
+                </p>
+              </div>
+            </div>
 
-            <div className="row g-4">
-              {products.map((product) => (
-                <div className="col-md-4" key={product.id}>
-                  <div className="card border-0 shadow-sm h-100">
+            <div className="admin-product-grid">
+              {products.map((product) => {
+                const imageCount = product.gallery_images?.length || 1;
+                const variantCount = productVariantCounts[product.id] || 0;
+
+                return (
+                <article className="admin-product-card" key={product.id}>
+                  <div className="admin-product-thumb">
                     <img
                       src={getProductPreviewImageSrc(product)}
                       alt={product.title}
                       loading="lazy"
-                      className="card-img-top"
                       onError={handlePreviewImageError}
-                      style={{
-                        height: "220px",
-                        width: "100%",
-                        objectFit: "cover",
-                      }}
                     />
+                  </div>
 
-                    <div className="card-body d-flex flex-column">
-                      <h5 className="fw-bold">{product.title}</h5>
-                      <p className="text-muted mb-1">{product.category}</p>
-                      <p className="fw-bold">₦{product.price}</p>
-                      <p className="text-muted small">{product.description}</p>
+                    <div className="admin-product-content">
+                      <div className="admin-product-title-row">
+                        <h5>{product.title}</h5>
+                        <strong>₦{product.price}</strong>
+                      </div>
+                      <p className="admin-product-category">{product.category}</p>
+                      <p className="admin-product-description">
+                        {product.description}
+                      </p>
 
-                      {product.gallery_images?.length > 0 && (
-                        <p className="small text-muted">
-                          {product.gallery_images.length} image
-                          {product.gallery_images.length === 1 ? "" : "s"}{" "}
-                          uploaded
-                        </p>
-                      )}
+                      <div className="admin-product-meta">
+                        <span>
+                          {imageCount} image{imageCount === 1 ? "" : "s"}
+                        </span>
+                        <span>
+                          {variantCount} variant{variantCount === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                    </div>
 
-                      <div className="d-flex gap-2 mt-auto">
+                      <div className="admin-product-actions">
                         <button
                           onClick={() => handleEditProduct(product)}
-                          className="btn btn-outline-dark w-50"
+                          className="btn btn-sm btn-outline-dark"
                         >
                           Edit
                         </button>
 
                         <button
                           onClick={() => handleDeleteProduct(product)}
-                          className="btn btn-danger w-50"
+                          className="btn btn-sm btn-outline-danger"
                         >
                           Delete
                         </button>
                       </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                </article>
+                );
+              })}
 
               {products.length === 0 && (
                 <p className="text-muted">No products uploaded yet.</p>
