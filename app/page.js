@@ -1,11 +1,14 @@
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
-import CategoryShowcase from "./components/CategoryShowcase";
 import FeaturedProducts from "./components/FeaturedProducts";
-import TrustSection from "./components/TrustSection";
 import Footer from "./components/Footer";
 import Testimonials from "./components/Testimonials";
 import SocialMediaSection from "./components/SocialMediaSection";
+import {
+  HomeStoryBanner,
+  ShopBySpaceEditorial,
+  StyledHomesInspiration,
+} from "./components/HomeEditorialSections";
 
 export const metadata = {
   alternates: {
@@ -38,9 +41,10 @@ export default function Home() {
     </div>
   </div>
 </section>
-      <CategoryShowcase />
+      <ShopBySpaceEditorial />
       <FeaturedProducts />
-      <TrustSection />
+      <HomeStoryBanner />
+      <StyledHomesInspiration />
       <Testimonials />
       <SocialMediaSection />
       <Footer />

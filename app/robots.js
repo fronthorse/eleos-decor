@@ -11,6 +11,7 @@ export default function robots() {
           "/auth/",
           "/customer/",
           "/cart/",
+          "/wishlist/",
           "/api/",
         ],
       },

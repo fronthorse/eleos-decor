@@ -30,8 +30,7 @@ export default function SocialMediaSection() {
             <p className="section-label">Stay Inspired</p>
             <h2 className="luxury-heading">Follow Eleos Decor</h2>
             <p className="text-muted mb-0">
-              Get decor inspiration, new arrivals, styling ideas, and updates
-              from Eleos Decor.
+              Styling ideas, new arrivals, and warm decor inspiration.
             </p>
           </div>
 

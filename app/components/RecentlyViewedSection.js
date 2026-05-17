@@ -7,8 +7,13 @@ export default function RecentlyViewedSection({ currentProductId }) {
   const [recentProducts, setRecentProducts] = useState([]);
 
   useEffect(() => {
-    const saved =
-      JSON.parse(localStorage.getItem("eleos-recently-viewed")) || [];
+    let saved = [];
+
+    try {
+      saved = JSON.parse(localStorage.getItem("eleos-recently-viewed")) || [];
+    } catch {
+      saved = [];
+    }
 
     const filtered = saved.filter(
       (product) => product.id !== currentProductId
@@ -20,14 +25,18 @@ export default function RecentlyViewedSection({ currentProductId }) {
   if (recentProducts.length === 0) return null;
 
   return (
-    <section className="py-5">
+    <section className="product-editorial-section product-recent-section">
       <div className="container">
-        <h3 className="fw-bold mb-4">Recently Viewed</h3>
+        <div className="product-section-heading">
+          <p className="section-label">Recently Viewed</p>
+          <h2>Pieces you considered</h2>
+        </div>
 
-        <div className="row g-4">
+        <div className="product-editorial-row">
           {recentProducts.map((product) => (
             <ProductCard
               key={product.id}
+              columnClassName="product-editorial-product-card"
               id={product.id}
               image={product.image_url}
               thumbnailImage={
@@ -39,6 +48,7 @@ export default function RecentlyViewedSection({ currentProductId }) {
               title={product.title}
               description={product.description}
               price={product.price}
+              category={product.category}
             />
           ))}
         </div>

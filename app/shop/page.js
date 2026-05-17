@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import Navbar from ".././components/Navbar";
@@ -15,13 +16,39 @@ import {
   searchProductsWithFullText,
   sanitizeProductSearchTerm,
 } from "../../lib/productSearch";
+import {
+  getCuratedFilterHref,
+  getCuratedShopFilter,
+  getProductStyleScore,
+  SHOP_SPACE_FILTERS,
+  STYLED_COLLECTION_FILTERS,
+} from "../../lib/shopCuration";
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 24;
 const SEARCH_DEBOUNCE_MS = 450;
+
+const shopSpaces = SHOP_SPACE_FILTERS;
+const styledCollections = STYLED_COLLECTION_FILTERS;
 
 function getPositivePage(value) {
   const page = Number.parseInt(value || "1", 10);
   return Number.isFinite(page) && page > 0 ? page : 1;
+}
+
+function applyProductSort(query, sort) {
+  if (sort === "oldest") {
+    return query.order("created_at", { ascending: true });
+  }
+
+  if (sort === "price-low") {
+    return query.order("price", { ascending: true });
+  }
+
+  if (sort === "price-high") {
+    return query.order("price", { ascending: false });
+  }
+
+  return query.order("created_at", { ascending: false });
 }
 
 function ShopContent() {
@@ -31,10 +58,20 @@ function ShopContent() {
   const searchParams = useSearchParams();
 
   const categoryParam = searchParams.get("category") || "All";
+  const spaceParam = searchParams.get("space") || "";
+  const collectionParam = searchParams.get("collection") || "";
   const queryParam =
     searchParams.get("search") || searchParams.get("query") || "";
   const sortParam = searchParams.get("sort") || "newest";
   const pageParam = getPositivePage(searchParams.get("page"));
+  const curatedFilter = useMemo(
+    () =>
+      getCuratedShopFilter({
+        space: spaceParam,
+        collection: collectionParam,
+      }),
+    [collectionParam, spaceParam]
+  );
 
   const [products, setProducts] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -59,6 +96,7 @@ function ShopContent() {
     "Figurines",
     "Faux Books",
     "Lamps",
+    "Lighting",
     "Diffusers",
     "Humidifiers",
     "Scented Candles",
@@ -67,6 +105,23 @@ function ShopContent() {
     "Artificial Water Fountains",
   ];
 
+  const hasActiveFilters =
+    categoryParam !== "All" ||
+    Boolean(curatedFilter) ||
+    Boolean(queryParam) ||
+    sortParam !== "newest";
+  const activeFilterLabels = [
+    curatedFilter?.label || "",
+    categoryParam !== "All" ? categoryParam : "",
+    queryParam ? `Search: ${queryParam}` : "",
+    sortParam !== "newest"
+      ? {
+          oldest: "Oldest first",
+          "price-low": "Price low to high",
+          "price-high": "Price high to low",
+        }[sortParam]
+      : "",
+  ].filter(Boolean);
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const showingStart = totalCount === 0 ? 0 : (pageParam - 1) * PAGE_SIZE + 1;
   const showingEnd = Math.min(pageParam * PAGE_SIZE, totalCount);
@@ -89,12 +144,111 @@ function ShopContent() {
     });
   }, [pathname, router, searchParams]);
 
+  const fetchCuratedProducts = useCallback(
+    async ({ cleanSearch, from }) => {
+      const tierResults = await Promise.all(
+        curatedFilter.tiers.map(async (tier) => {
+          let countQuery = supabase
+            .from("products")
+            .select("id", {
+              count: "exact",
+              head: true,
+            })
+            .in("category", tier.categories);
+
+          countQuery = applyProductSearchFilter(countQuery, cleanSearch);
+
+          const { count, error } = await countQuery;
+
+          if (error) {
+            throw error;
+          }
+
+          return {
+            ...tier,
+            count: count || 0,
+          };
+        })
+      );
+      const total = tierResults.reduce((sum, tier) => sum + tier.count, 0);
+      let remainingOffset = from;
+      let remainingLimit = PAGE_SIZE;
+      const selectedProducts = [];
+
+      for (const tier of tierResults) {
+        if (remainingLimit <= 0) {
+          break;
+        }
+
+        if (remainingOffset >= tier.count) {
+          remainingOffset -= tier.count;
+          continue;
+        }
+
+        const tierLimit = Math.min(remainingLimit, tier.count - remainingOffset);
+        let productsQuery = supabase
+          .from("products")
+          .select("*")
+          .in("category", tier.categories);
+
+        productsQuery = applyProductSearchFilter(productsQuery, cleanSearch);
+        productsQuery = applyProductSort(productsQuery, sortParam);
+
+        const { data, error } = await productsQuery.range(
+          remainingOffset,
+          remainingOffset + tierLimit - 1
+        );
+
+        if (error) {
+          throw error;
+        }
+
+        const tierProducts = data || [];
+
+        if (sortParam === "newest" && curatedFilter.styleKeywords.length > 0) {
+          tierProducts.sort((first, second) => {
+            return (
+              getProductStyleScore(second, curatedFilter.styleKeywords) -
+              getProductStyleScore(first, curatedFilter.styleKeywords)
+            );
+          });
+        }
+
+        selectedProducts.push(...tierProducts);
+        remainingLimit -= tierProducts.length;
+        remainingOffset = 0;
+      }
+
+      return {
+        products: selectedProducts,
+        totalCount: total,
+      };
+    },
+    [curatedFilter, sortParam, supabase]
+  );
+
   const fetchProducts = useCallback(async () => {
     setLoading(true);
 
     const cleanSearch = sanitizeProductSearchTerm(queryParam);
     const from = (pageParam - 1) * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
+
+    if (curatedFilter) {
+      try {
+        const curatedResults = await fetchCuratedProducts({
+          cleanSearch,
+          from,
+        });
+
+        setProducts(curatedResults.products);
+        setTotalCount(curatedResults.totalCount);
+        setLoading(false);
+        return;
+      } catch (error) {
+        console.warn("Curated shop filter failed; using category fallback.", error);
+      }
+    }
 
     if (cleanSearch) {
       try {
@@ -144,15 +298,7 @@ function ShopContent() {
 
     query = applyProductSearchFilter(query, cleanSearch);
 
-    if (sortParam === "oldest") {
-      query = query.order("created_at", { ascending: true });
-    } else if (sortParam === "price-low") {
-      query = query.order("price", { ascending: true });
-    } else if (sortParam === "price-high") {
-      query = query.order("price", { ascending: false });
-    } else {
-      query = query.order("created_at", { ascending: false });
-    }
+    query = applyProductSort(query, sortParam);
 
     const { data, error, count } = await query.range(from, to);
 
@@ -167,7 +313,15 @@ function ShopContent() {
     setProducts(data || []);
     setTotalCount(count || 0);
     setLoading(false);
-  }, [categoryParam, pageParam, queryParam, sortParam, supabase]);
+  }, [
+    categoryParam,
+    curatedFilter,
+    fetchCuratedProducts,
+    pageParam,
+    queryParam,
+    sortParam,
+    supabase,
+  ]);
 
   useEffect(() => {
     setSearchTerm(queryParam);
@@ -208,46 +362,49 @@ function ShopContent() {
 
       <section className="shop-page-section">
         <div className="container">
-          <div className="text-center shop-page-heading">
-            <h1 className="fw-bold">Shop Eleos Decor</h1>
+          <div className="shop-page-heading">
+            <h1 className="fw-bold">Shop Curated Decor</h1>
 
             <p className="text-muted">
-              Explore elegant decor pieces for beautiful living spaces.
+              Curated decor pieces to make every corner feel beautifully styled.
             </p>
           </div>
 
-          <div className="d-md-none mb-3">
-            <button
-              onClick={() => setFilterOpen(!filterOpen)}
-              className="btn btn-dark w-100"
-            >
-              {filterOpen ? "Hide Search & Filter" : "Search & Filter"}
-            </button>
-          </div>
-
-          <div className={`shop-mobile-filter ${filterOpen ? "open" : ""}`}>
-            <div className="row g-3 align-items-center mb-4">
-              <div className="col-md-8">
-                <label className="form-label fw-bold small mb-1 d-md-none">
-                  Search
+          <section className="shop-control-panel" aria-label="Shop controls">
+            <div className="shop-primary-controls">
+              <div className="shop-search-control">
+                <label htmlFor="shop-search" className="visually-hidden">
+                  Search products
                 </label>
 
                 <input
-                  type="text"
-                  className="form-control form-control-lg"
-                  placeholder="Search products..."
+                  id="shop-search"
+                  type="search"
+                  className="shop-search-input"
+                  placeholder="Search decor pieces"
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                 />
               </div>
 
-              <div className="col-md-4">
-                <label className="form-label fw-bold small mb-1 d-md-none">
-                  Sort
+              <button
+                type="button"
+                onClick={() => setFilterOpen(!filterOpen)}
+                className="shop-filter-toggle"
+                aria-expanded={filterOpen}
+                aria-controls="shop-filter-options"
+              >
+                Filter & Sort
+              </button>
+
+              <div className="shop-sort-control">
+                <label htmlFor="shop-sort" className="visually-hidden">
+                  Sort products
                 </label>
 
                 <select
-                  className="form-select form-select-lg"
+                  id="shop-sort"
+                  className="shop-sort-select"
                   value={sortParam}
                   onChange={(event) =>
                     updateShopParams({
@@ -264,19 +421,44 @@ function ShopContent() {
               </div>
             </div>
 
-            <div className="shop-filter-card mb-5">
-              <div className="row g-3">
-                <div className="col-md-6">
-                  <label className="form-label fw-bold small mb-1">
-                    Category
-                  </label>
+            <div
+              id="shop-filter-options"
+              className={`shop-filter-options ${filterOpen ? "open" : ""}`}
+            >
+              <div className="shop-compact-select-row">
+                <div className="shop-mobile-sort-control">
+                  <label htmlFor="shop-mobile-sort">Sort</label>
 
                   <select
-                    className="form-select"
+                    id="shop-mobile-sort"
+                    className="shop-sort-select"
+                    value={sortParam}
+                    onChange={(event) =>
+                      updateShopParams({
+                        sort: event.target.value,
+                        page: "1",
+                      })
+                    }
+                  >
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="price-low">Price: Low to High</option>
+                    <option value="price-high">Price: High to Low</option>
+                  </select>
+                </div>
+
+                <div className="shop-category-control">
+                  <label htmlFor="shop-category">Browse</label>
+
+                  <select
+                    id="shop-category"
+                    className="shop-category-select"
                     value={categoryParam}
                     onChange={(event) =>
                       updateShopParams({
                         category: event.target.value,
+                        space: "",
+                        collection: "",
                         page: "1",
                       })
                     }
@@ -289,30 +471,82 @@ function ShopContent() {
                   </select>
                 </div>
 
-                <div className="col-md-6 d-none d-md-block">
-                  <label className="form-label fw-bold small mb-1">
-                    Showing
-                  </label>
+                {hasActiveFilters && (
+                  <Link href="/shop" className="shop-clear-button">
+                    Clear filters
+                  </Link>
+                )}
+              </div>
 
-                  <div className="bg-white border rounded-pill px-4 py-2 small">
-                    {categoryParam === "All" ? "All categories" : categoryParam}
-                  </div>
+              <div className="shop-chip-group" aria-label="Shop by space">
+                <span className="shop-chip-label">Spaces</span>
+
+                <div className="shop-chip-row">
+                  {shopSpaces.map((space) => (
+                    <Link
+                      key={space.label}
+                      href={getCuratedFilterHref("space", space.slug)}
+                      className={`shop-space-chip ${
+                        spaceParam === space.slug ? "active" : ""
+                      }`}
+                    >
+                      {space.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+
+              <div className="shop-chip-group" aria-label="Styled collections">
+                <span className="shop-chip-label">Collections</span>
+
+                <div className="shop-chip-row">
+                  {styledCollections.map((collection) => (
+                    <Link
+                      key={collection.title}
+                      href={getCuratedFilterHref("collection", collection.slug)}
+                      className={`shop-collection-chip ${
+                        collectionParam === collection.slug ? "active" : ""
+                      }`}
+                      title={collection.text}
+                    >
+                      {collection.title}
+                    </Link>
+                  ))}
                 </div>
               </div>
             </div>
-          </div>
+
+            {activeFilterLabels.length > 0 && (
+              <div className="shop-active-filters" aria-label="Active filters">
+                {activeFilterLabels.map((label) => (
+                  <span key={label}>{label}</span>
+                ))}
+              </div>
+            )}
+          </section>
 
           {!loading && (
-            <p className="text-muted mb-4">
-              Showing {showingStart}-{showingEnd} of {totalCount} product
-              {totalCount === 1 ? "" : "s"}
-            </p>
+            <div className="shop-results-meta">
+              <p className="text-muted mb-0">
+                Showing {showingStart}-{showingEnd} of {totalCount} product
+                {totalCount === 1 ? "" : "s"}
+              </p>
+
+              {hasActiveFilters && (
+                <Link href="/shop" className="shop-reset-link">
+                  View All Products
+                </Link>
+              )}
+            </div>
           )}
 
           {loading && (
-            <div className="row g-4">
-              {[1, 2, 3, 4, 5, 6].map((item) => (
-                <ProductSkeleton key={item} />
+            <div className="row g-3 g-lg-4 shop-product-grid">
+              {Array.from({ length: 12 }, (_, index) => index + 1).map((item) => (
+                <ProductSkeleton
+                  key={item}
+                  columnClassName="col-6 col-md-4 col-xl-3"
+                />
               ))}
             </div>
           )}
@@ -328,10 +562,11 @@ function ShopContent() {
 
           {!loading && products.length > 0 && (
             <>
-              <div className="row g-4">
+              <div className="row g-3 g-lg-4 shop-product-grid">
                 {products.map((product) => (
                   <ProductCard
                     key={product.id}
+                    columnClassName="col-6 col-md-4 col-xl-3"
                     id={product.id}
                     image={product.image_url}
                     thumbnailImage={
@@ -343,6 +578,7 @@ function ShopContent() {
                     title={product.title}
                     description={product.description}
                     price={product.price}
+                    category={product.category}
                   />
                 ))}
               </div>

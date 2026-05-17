@@ -21,6 +21,104 @@ import {
   normalizePrice,
 } from "../../../lib/seo";
 
+const COMPLETE_LOOK_CATEGORY_MAP = {
+  "dining sets": ["Scented Candles", "Flowers", "Ornaments", "Diffusers"],
+  tables: ["Scented Candles", "Flowers", "Frames", "Ornaments", "Plants"],
+  bedsheets: ["Throw Pillows", "Throw Blankets", "Lamps", "Diffusers"],
+  "throw pillows": ["Throw Blankets", "Bedsheets", "Rugs", "Lamps"],
+  "throw blankets": ["Throw Pillows", "Bedsheets", "Lamps", "Scented Candles"],
+  rugs: ["Tables", "Plants", "Frames", "Throw Pillows"],
+  mirrors: ["Tables", "Scented Candles", "Flowers", "Frames"],
+  frames: ["Tables", "Plants", "Lamps", "Scented Candles"],
+  "wall clocks": ["Tables", "Frames", "Plants", "Ornaments"],
+  lamps: ["Throw Pillows", "Throw Blankets", "Diffusers", "Tables"],
+  lighting: ["Lamps", "Mirrors", "Tables", "Frames"],
+  diffusers: ["Scented Candles", "Flowers", "Frames", "Lamps"],
+  "scented candles": ["Flowers", "Diffusers", "Tables", "Ornaments"],
+  plants: ["Tables", "Frames", "Rugs", "Scented Candles"],
+  flowers: ["Tables", "Scented Candles", "Mirrors", "Ornaments"],
+};
+
+const DEFAULT_COMPLETE_LOOK_CATEGORIES = [
+  "Scented Candles",
+  "Flowers",
+  "Frames",
+  "Plants",
+];
+
+function normalizeCategoryKey(category) {
+  return String(category || "").toLowerCase().trim();
+}
+
+function getCompleteLookCategories(category) {
+  return (
+    COMPLETE_LOOK_CATEGORY_MAP[normalizeCategoryKey(category)] ||
+    DEFAULT_COMPLETE_LOOK_CATEGORIES
+  );
+}
+
+function getStylingStory(category) {
+  const categoryKey = normalizeCategoryKey(category);
+
+  if (categoryKey.includes("dining")) {
+    return "Build a graceful tablescape with soft light, sculptural accents, and florals that make shared moments feel considered.";
+  }
+
+  if (
+    categoryKey.includes("bedsheet") ||
+    categoryKey.includes("pillow") ||
+    categoryKey.includes("blanket")
+  ) {
+    return "Layer calm bedding, plush cushions, and warm bedside light for a bedroom that feels restful and quietly luxurious.";
+  }
+
+  if (categoryKey.includes("rug")) {
+    return "Anchor the room with texture, then add tables, greenery, and framed details for a complete styled setting.";
+  }
+
+  if (categoryKey.includes("mirror")) {
+    return "Pair reflective pieces with console styling, candles, and soft florals to create a polished focal point.";
+  }
+
+  return "Layer warm textures, soft lighting, and statement decor for a beautifully styled living space.";
+}
+
+async function getCompleteLookProducts(supabase, product) {
+  const categories = getCompleteLookCategories(product.category);
+  const selectedProducts = [];
+  const selectedIds = new Set([String(product.id)]);
+
+  for (const category of categories) {
+    if (selectedProducts.length >= 4) {
+      break;
+    }
+
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .eq("category", category)
+      .neq("id", product.id)
+      .order("created_at", { ascending: false })
+      .limit(4 - selectedProducts.length);
+
+    if (error) {
+      console.warn("Unable to fetch complete-the-look products.", error.message);
+      continue;
+    }
+
+    (data || []).forEach((item) => {
+      const itemId = String(item.id);
+
+      if (!selectedIds.has(itemId) && selectedProducts.length < 4) {
+        selectedIds.add(itemId);
+        selectedProducts.push(item);
+      }
+    });
+  }
+
+  return selectedProducts;
+}
+
 async function getProductById(id) {
   const supabase = await createClient();
 
@@ -168,7 +266,9 @@ export default async function ProductDetails({ params }) {
     .select("*")
     .eq("category", product.category)
     .neq("id", product.id)
-    .limit(3);
+    .order("created_at", { ascending: false })
+    .limit(4);
+  const completeLookProducts = await getCompleteLookProducts(supabase, product);
 
   const productUrl = absoluteUrl(`/product/${product.id}`);
   const productDescription = normalizeDescription(product.description);
@@ -211,10 +311,10 @@ export default async function ProductDetails({ params }) {
 
       <TrackRecentlyViewed product={product} />
 
-      <section className="luxury-section product-details-section">
+      <section className="product-editorial-hero product-details-section">
         <div className="container">
-          <div className="row g-5 align-items-start">
-            <div className="col-lg-6">
+          <div className="product-editorial-layout">
+            <div className="product-editorial-gallery">
               <ProductGallery
                 mainImage={product.image_url}
                 galleryImages={product.gallery_images}
@@ -222,40 +322,75 @@ export default async function ProductDetails({ params }) {
               />
             </div>
 
-            <div className="col-lg-6">
-              <p className="section-label">{product.category}</p>
+            <div className="product-editorial-info">
+              <p className="section-label product-editorial-kicker">
+                {product.category}
+              </p>
 
-              <h1 className="luxury-heading mb-3">{product.title}</h1>
+              <h1 className="product-editorial-title">{product.title}</h1>
 
-              <h3 className="fw-bold gold-text mb-4">
+              <p className="product-editorial-price">
                 ₦{product.price}
-              </h3>
+              </p>
 
-              <p className="text-muted product-detail-description">
+              <p className="product-detail-description product-editorial-description">
                 {product.description}
               </p>
 
+              <div className="product-style-note">
+                <span>Styling note</span>
+                <p>{getStylingStory(product.category)}</p>
+              </div>
+
               <WhatsAppOrderBox product={product} />
+
+              <div className="product-trust-grid" aria-label="Shopping support">
+                <div>
+                  <span>Delivery</span>
+                  <strong>Nationwide delivery</strong>
+                  <p>Carefully coordinated across Nigeria.</p>
+                </div>
+
+                <div>
+                  <span>Checkout</span>
+                  <strong>WhatsApp-assisted order</strong>
+                  <p>Availability and delivery are confirmed before payment.</p>
+                </div>
+
+                <div>
+                  <span>Support</span>
+                  <strong>Decor guidance</strong>
+                  <p>Ask for styling help before you decide.</p>
+                </div>
+
+                <div>
+                  <span>Returns</span>
+                  <strong>Exchange support</strong>
+                  <p>Return guidance is available for eligible items.</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <ProductReviews productId={product.id} />
-
-      {similarProducts && similarProducts.length > 0 && (
-        <section className="luxury-section">
+      {completeLookProducts.length > 0 && (
+        <section className="product-editorial-section">
           <div className="container">
-            <div className="text-center mb-5">
-              <p className="section-label">You May Also Like</p>
-
-              <h2 className="luxury-heading">Similar Products</h2>
+            <div className="product-section-heading">
+              <p className="section-label">Styled Together</p>
+              <h2>Complete the look</h2>
+              <p>
+                Curated companion pieces chosen to help this item feel at home
+                in a finished room.
+              </p>
             </div>
 
-            <div className="row g-4">
-              {similarProducts.map((item) => (
+            <div className="product-editorial-row">
+              {completeLookProducts.map((item) => (
                 <ProductCard
                   key={item.id}
+                  columnClassName="product-editorial-product-card"
                   id={item.id}
                   image={item.image_url}
                   thumbnailImage={
@@ -267,6 +402,45 @@ export default async function ProductDetails({ params }) {
                   title={item.title}
                   description={item.description}
                   price={item.price}
+                  category={item.category}
+                />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <ProductReviews productId={product.id} />
+
+      {similarProducts && similarProducts.length > 0 && (
+        <section className="product-editorial-section product-related-section">
+          <div className="container">
+            <div className="product-section-heading">
+              <p className="section-label">More to Explore</p>
+
+              <h2>Similar pieces</h2>
+              <p>
+                Keep browsing within this decor family for a cohesive look.
+              </p>
+            </div>
+
+            <div className="product-editorial-row">
+              {similarProducts.map((item) => (
+                <ProductCard
+                  key={item.id}
+                  columnClassName="product-editorial-product-card"
+                  id={item.id}
+                  image={item.image_url}
+                  thumbnailImage={
+                    item.thumbnailImage ||
+                    item.thumbnailUrl ||
+                    item.thumbnail_url ||
+                    item.thumbnail_image
+                  }
+                  title={item.title}
+                  description={item.description}
+                  price={item.price}
+                  category={item.category}
                 />
               ))}
             </div>

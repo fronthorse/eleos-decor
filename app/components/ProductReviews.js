@@ -1,21 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 
+function ReviewStars({ rating, className = "" }) {
+  return (
+    <div
+      className={`review-stars review-stars-display ${className}`}
+      aria-label={`${rating} out of 5 stars`}
+    >
+      {Array.from({ length: 5 }, (_, index) => {
+        const starValue = index + 1;
+
+        return (
+          <span
+            key={starValue}
+            className={starValue <= Number(rating || 0) ? "active" : ""}
+          >
+            ★
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ProductReviews({ productId }) {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [reviews, setReviews] = useState([]);
   const [customerName, setCustomerName] = useState("");
   const [rating, setRating] = useState(5);
+  const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState("");
   const [message, setMessage] = useState("");
+  const activeRating = hoverRating || rating;
 
-  useEffect(() => {
-    fetchReviews();
-  }, []);
-
-  async function fetchReviews() {
+  const fetchReviews = useCallback(async () => {
     const { data, error } = await supabase
       .from("reviews")
       .select("*")
@@ -25,7 +45,11 @@ export default function ProductReviews({ productId }) {
     if (!error) {
       setReviews(data || []);
     }
-  }
+  }, [productId, supabase]);
+
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews]);
 
   async function submitReview(e) {
     e.preventDefault();
@@ -47,38 +71,66 @@ export default function ProductReviews({ productId }) {
 
     setCustomerName("");
     setRating(5);
+    setHoverRating(0);
     setComment("");
     setMessage("Review submitted successfully.");
     fetchReviews();
   }
 
   return (
-    <section className="py-5">
+    <section className="product-reviews-section">
       <div className="container">
-        <h3 className="fw-bold mb-4">Customer Reviews</h3>
+        <div className="product-section-heading">
+          <p className="section-label">Customer Notes</p>
+          <h2>Reviews</h2>
+          <p>
+            Real customer impressions help each piece feel easier to imagine at
+            home.
+          </p>
+        </div>
 
-        <div className="row g-5">
-          <div className="col-lg-6">
+        <div className="product-reviews-layout">
+          <div>
             {reviews.length === 0 ? (
-              <p className="text-muted">No reviews yet. Be the first to review this product.</p>
+              <div className="product-review-empty">
+                <h3>No reviews yet</h3>
+                <p>
+                  Be the first to share how this piece looks or feels in your
+                  space.
+                </p>
+              </div>
             ) : (
-              reviews.map((review) => (
-                <div key={review.id} className="review-card mb-4">
-                  <div className="review-stars mb-2">
-                    {"★".repeat(review.rating)}
-                    {"☆".repeat(5 - review.rating)}
-                  </div>
+              <div className="product-review-list">
+                {reviews.map((review) => (
+                  <div key={review.id} className="review-card product-review-card">
+                    <div className="review-card-header">
+                      <ReviewStars rating={review.rating} />
 
-                  <h6 className="fw-bold">{review.customer_name}</h6>
-                  <p className="text-muted mb-0">{review.comment}</p>
-                </div>
-              ))
+                      {review.created_at && (
+                        <time dateTime={review.created_at}>
+                          {new Date(review.created_at).toLocaleDateString(
+                            "en-NG",
+                            {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            }
+                          )}
+                        </time>
+                      )}
+                    </div>
+
+                    <p className="review-card-comment">{review.comment}</p>
+                    <h6>{review.customer_name}</h6>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
-          <div className="col-lg-6">
-           <form onSubmit={submitReview} className="review-form-box p-4">
-              <h5 className="fw-bold mb-3">Leave a Review</h5>
+          <div>
+            <form onSubmit={submitReview} className="review-form-box">
+              <h5>Leave a Review</h5>
 
               <div className="mb-3">
                 <label className="form-label">Your Name</label>
@@ -92,18 +144,57 @@ export default function ProductReviews({ productId }) {
               </div>
 
               <div className="mb-3">
-                <label className="form-label">Rating</label>
-                <select
-                  className="form-select"
-                  value={rating}
-                  onChange={(e) => setRating(Number(e.target.value))}
+                <span className="form-label d-block">Rating</span>
+                <div
+                  className="review-rating-picker"
+                  role="radiogroup"
+                  aria-label="Choose a rating"
+                  onMouseLeave={() => setHoverRating(0)}
                 >
-                  <option value="5">5 Stars</option>
-                  <option value="4">4 Stars</option>
-                  <option value="3">3 Stars</option>
-                  <option value="2">2 Stars</option>
-                  <option value="1">1 Star</option>
-                </select>
+                  {Array.from({ length: 5 }, (_, index) => {
+                    const starValue = index + 1;
+
+                    return (
+                      <button
+                        key={starValue}
+                        type="button"
+                        role="radio"
+                        aria-checked={rating === starValue}
+                        aria-label={`${starValue} star${
+                          starValue === 1 ? "" : "s"
+                        }`}
+                        className={`review-star-button ${
+                          starValue <= activeRating ? "active" : ""
+                        }`}
+                        onClick={() => setRating(starValue)}
+                        onFocus={() => setHoverRating(starValue)}
+                        onBlur={() => setHoverRating(0)}
+                        onMouseEnter={() => setHoverRating(starValue)}
+                        onKeyDown={(event) => {
+                          if (
+                            event.key === "ArrowRight" ||
+                            event.key === "ArrowUp"
+                          ) {
+                            event.preventDefault();
+                            setRating((current) => Math.min(5, current + 1));
+                          }
+
+                          if (
+                            event.key === "ArrowLeft" ||
+                            event.key === "ArrowDown"
+                          ) {
+                            event.preventDefault();
+                            setRating((current) => Math.max(1, current - 1));
+                          }
+                        }}
+                      >
+                        ★
+                      </button>
+                    );
+                  })}
+
+                  <span className="review-rating-value">{rating} / 5</span>
+                </div>
               </div>
 
               <div className="mb-3">

@@ -16,7 +16,24 @@ export default function Testimonials() {
       .limit(6);
 
     if (!error) {
-      setReviews(data || []);
+      const polishedReviews = (data || [])
+        .filter((review) => {
+          const comment = String(review.comment || "").trim();
+          const customerName = String(review.customer_name || "").trim();
+          const lowerComment = comment.toLowerCase();
+          const lowerName = customerName.toLowerCase();
+
+          return (
+            Number(review.rating) >= 4 &&
+            comment.length >= 24 &&
+            !["test", "admin"].includes(lowerComment) &&
+            !["test", "admin"].includes(lowerName) &&
+            lowerComment !== "good product"
+          );
+        })
+        .slice(0, 3);
+
+      setReviews(polishedReviews);
     }
   }
 
@@ -27,11 +44,11 @@ export default function Testimonials() {
   if (reviews.length === 0) return null;
 
   return (
-    <section className="luxury-section bg-white">
+    <section className="home-testimonials-section bg-white">
       <div className="container">
-        <div className="text-center mb-5">
+        <div className="text-center home-compact-section-header">
           <p className="section-label">Customer Love</p>
-          <h2 className="luxury-heading">What Our Customers Say</h2>
+          <h2 className="luxury-heading">Styled spaces, happy customers.</h2>
           <p className="text-muted">
             Real feedback from people beautifying their spaces with Eleos Decor.
           </p>

@@ -71,7 +71,7 @@ export default function ProductGallery({ mainImage, galleryImages = [], title })
 
   return (
     <>
-      <div>
+      <div className="product-gallery-shell">
         <div
           className="gallery-main-wrapper"
           onTouchStart={(e) => setTouchStart(e.touches[0].clientX)}
@@ -90,13 +90,7 @@ export default function ProductGallery({ mainImage, galleryImages = [], title })
             onClick={() => setZoomOpen(true)}
             onLoad={() => setImageLoading(false)}
             onError={() => handleImageError(activeImage)}
-            className="img-fluid rounded shadow product-zoom-image"
-            style={{
-              width: "100%",
-              height: "520px",
-              objectFit: "cover",
-              cursor: "zoom-in",
-            }}
+            className="product-zoom-image product-gallery-image"
           />
 
           {safeImages.length > 1 && (
@@ -141,6 +135,7 @@ export default function ProductGallery({ mainImage, galleryImages = [], title })
                   className={`gallery-thumb ${
                     activeIndex === index ? "active" : ""
                   }`}
+                  aria-label={`View ${imageAlt} image ${index + 1}`}
                 >
                   <Image
                     src={thumbImage}

@@ -32,9 +32,16 @@ export default function FeaturedProducts() {
   }, []);
 
   return (
-    <section className="py-5" data-aos="fade-up">
+    <section className="home-featured-products" data-aos="fade-up">
       <div className="container">
-        <h2 className="text-center fw-bold mb-5">Featured Products</h2>
+        <div className="home-section-header">
+          <p className="home-kicker">Curated Pieces</p>
+          <h2>New details for rooms that need a finishing touch.</h2>
+          <p>
+            A small selection of fresh decor pieces chosen for warm, elegant
+            homes and workspaces.
+          </p>
+        </div>
 
         {loading && (
   <div className="row g-4">
@@ -65,8 +72,15 @@ export default function FeaturedProducts() {
               title={product.title}
               description={product.description}
               price={product.price}
+              category={product.category}
             />
           ))}
+        </div>
+
+        <div className="text-center mt-4">
+          <a href="/shop" className="btn btn-dark">
+            View All Products
+          </a>
         </div>
       </div>
     </section>

@@ -1,28 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useCart } from "../../context/CartContext";
+import { useWishlist } from "../../context/WishlistContext";
 import { createClient } from "../../lib/supabase/client";
 import { getSessionSafely } from "../../lib/supabase/auth";
 import { isAdminEmail } from "../../lib/adminAuth";
 import MiniCartDrawer from "./MiniCartDrawer";
 import { useRouter } from "next/navigation";
-import { FiShoppingBag } from "react-icons/fi";
+import { FiHeart, FiShoppingBag } from "react-icons/fi";
 
 export default function Navbar() {
-  const supabase = createClient();
-const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
   const { cartCount, clearCart } = useCart();
+  const { wishlistCount } = useWishlist();
   const [cartOpen, setCartOpen] = useState(false);
   const [user, setUser] = useState(null);
   const isAdmin = isAdminEmail(user?.email);
 
-  async function checkUser() {
+  const checkUser = useCallback(async () => {
     const { session } = await getSessionSafely(supabase);
 
     setUser(session?.user || null);
-  }
+  }, [supabase]);
 
   useEffect(() => {
     checkUser();
@@ -34,19 +36,19 @@ const router = useRouter();
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [checkUser, supabase.auth]);
 
   async function handleLogout() {
-  await supabase.auth.signOut();
+    await supabase.auth.signOut();
 
-  clearCart();
-  localStorage.removeItem("eleos-cart");
+    clearCart();
+    localStorage.removeItem("eleos-cart");
 
-  setUser(null);
+    setUser(null);
 
-  router.push("/");
-  router.refresh();
-}
+    router.push("/");
+    router.refresh();
+  }
 
   return (
     <>
@@ -61,19 +63,29 @@ const router = useRouter();
           </Link>
 
           <div className="d-flex align-items-center gap-2 order-lg-2">
-            <button
-  onClick={() => setCartOpen(true)}
-  className="cart-icon-btn"
-  aria-label="Open cart"
->
-  <FiShoppingBag />
+            <Link
+              href="/wishlist"
+              className="cart-icon-btn wishlist-nav-btn"
+              aria-label="Open wishlist"
+            >
+              <FiHeart />
 
-  {cartCount > 0 && (
-    <span className="cart-count-badge">
-      {cartCount}
-    </span>
-  )}
-</button>
+              {wishlistCount > 0 && (
+                <span className="cart-count-badge">{wishlistCount}</span>
+              )}
+            </Link>
+
+            <button
+              onClick={() => setCartOpen(true)}
+              className="cart-icon-btn"
+              aria-label="Open cart"
+            >
+              <FiShoppingBag />
+
+              {cartCount > 0 && (
+                <span className="cart-count-badge">{cartCount}</span>
+              )}
+            </button>
 
             <button
               className="navbar-toggler"

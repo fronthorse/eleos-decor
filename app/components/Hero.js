@@ -1,25 +1,46 @@
+import Image from "next/image";
+import Link from "next/link";
+
+const heroImage =
+  "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=2200&q=82";
+
 export default function Hero() {
   return (
-    <section className="hero-section d-flex align-items-center">
-      <div className="container">
-        <div className="row">
-          <div className="col-lg-7">
-            <p className="section-label text-white mb-3">
-              Eleos Decor
-            </p>
+    <section className="home-editorial-hero">
+      <Image
+        src={heroImage}
+        alt="Warm modern living room with layered neutral decor"
+        fill
+        priority
+        sizes="100vw"
+        className="home-editorial-hero-image"
+      />
 
-            <h1 className="hero-title">
-              Beautiful Décor for Warm, Elegant Spaces
-            </h1>
+      <div className="home-editorial-hero-overlay" />
 
-            <p className="hero-text mt-3">
-              Curated home and office décor pieces designed to add comfort,
-              style, and personality to your space.
-            </p>
+      <div className="container home-editorial-hero-content">
+        <div className="home-editorial-hero-copy">
+          <p className="home-kicker">Eleos Decor</p>
 
-            <a href="/shop" className="btn btn-light hero-btn mt-4">
+          <h1>Create a home that feels calm, warm, and beautifully styled.</h1>
+
+          <p>
+            Curated decor pieces for layered living rooms, restful bedrooms,
+            welcoming entryways, and the little corners that make a space feel
+            personal.
+          </p>
+
+          <div className="home-hero-actions">
+            <Link href="/shop" className="btn btn-light hero-btn">
               Shop Collection
-            </a>
+            </Link>
+
+            <Link
+              href="/shop?category=Tables&page=1"
+              className="home-hero-secondary-link"
+            >
+              Explore by room
+            </Link>
           </div>
         </div>
       </div>

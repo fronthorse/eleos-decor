@@ -17,10 +17,16 @@ export default function TrackRecentlyViewed({ product }) {
         product.thumbnail_url ||
         product.thumbnail_image,
       description: product.description,
+      category: product.category,
     };
 
-    const saved =
-      JSON.parse(localStorage.getItem("eleos-recently-viewed")) || [];
+    let saved = [];
+
+    try {
+      saved = JSON.parse(localStorage.getItem("eleos-recently-viewed")) || [];
+    } catch {
+      saved = [];
+    }
 
     const filtered = saved.filter(
       (item) => item.id !== viewedProduct.id
@@ -34,7 +40,18 @@ export default function TrackRecentlyViewed({ product }) {
     );
 
     
-  }, [product?.id]);
+  }, [
+    product?.category,
+    product?.description,
+    product?.id,
+    product?.image_url,
+    product?.price,
+    product?.thumbnailImage,
+    product?.thumbnailUrl,
+    product?.thumbnail_image,
+    product?.thumbnail_url,
+    product?.title,
+  ]);
 
   return null;
 }

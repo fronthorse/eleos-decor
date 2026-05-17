@@ -18,8 +18,9 @@ export default function ProductCard({
   image,
   thumbnailImage,
   title,
-  description,
   price,
+  category,
+  columnClassName = "col-md-4",
 }) {
   const { addToCart } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
@@ -58,20 +59,27 @@ export default function ProductCard({
     e.preventDefault();
     e.stopPropagation();
 
-    const result = await toggleWishlist(id);
+    const result = await toggleWishlist({
+      id,
+      title,
+      price,
+      category,
+      image_url: image,
+      thumbnailImage,
+      href: `/product/${id}`,
+    });
 
     if (result?.message) {
-      result.success ? toast.success(result.message) : toast.error(result.message);
+      result.success
+        ? toast.success(result.message)
+        : toast.error(result.message);
     }
   }
 
   return (
-    <div className="col-md-4">
+    <div className={columnClassName}>
       <div className="product-card h-100">
-        <Link
-          href={`/product/${id}`}
-          style={{ textDecoration: "none", color: "inherit" }}
-        >
+        <Link href={`/product/${id}`} className="product-card-link">
           <div className="product-image-wrapper">
             <button
               type="button"
@@ -79,7 +87,7 @@ export default function ProductCard({
               className="wishlist-btn"
               aria-label={saved ? "Remove from wishlist" : "Add to wishlist"}
             >
-              {saved ? "♥" : "♡"}
+              {saved ? "\u2665" : "\u2661"}
             </button>
 
             <Image
@@ -89,43 +97,32 @@ export default function ProductCard({
               width={640}
               height={512}
               loading="lazy"
-              sizes="(max-width: 575px) 100vw, (max-width: 991px) 50vw, 33vw"
+              sizes="(max-width: 575px) 50vw, (max-width: 991px) 33vw, 25vw"
               onError={() => setImageFailed(true)}
             />
           </div>
 
-          <div className="p-4">
-            <h5 className="fw-bold mb-3">{title}</h5>
-
-            <p className="text-muted product-description">
-              {description}
-            </p>
+          <div className="product-card-body">
+            <h5>{title}</h5>
           </div>
         </Link>
 
-        <div className="px-4 pb-4 mt-auto">
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <h5 className="fw-bold mb-0">₦{price}</h5>
+        <div className="product-card-actions">
+          <div className="product-card-price-row">
+            <strong>{"\u20a6"}{price}</strong>
 
-            <span className="gold-text small fw-bold">
-              Premium Decor
-            </span>
+            <Link href={`/product/${id}`} className="product-card-details">
+              Details
+            </Link>
           </div>
 
           <button
             type="button"
             onClick={handleAddToCart}
-            className="btn btn-dark w-100 py-3 mb-2"
+            className="product-card-add"
           >
             Add to Cart
           </button>
-
-          <Link
-            href={`/product/${id}`}
-            className="btn btn-outline-dark w-100 py-3"
-          >
-            View Details
-          </Link>
         </div>
       </div>
     </div>
