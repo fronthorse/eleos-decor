@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
@@ -24,6 +24,12 @@ import imageCompression from "browser-image-compression";
 
 const PRODUCT_PAGE_SIZE = 12;
 const INQUIRY_PAGE_SIZE = 10;
+const PRODUCT_IMAGE_COMPRESSION_OPTIONS = {
+  maxSizeMB: 0.75,
+  maxWidthOrHeight: 1500,
+  useWebWorker: true,
+  initialQuality: 0.78,
+};
 const ADMIN_PRODUCT_LIST_FIELDS =
   "id,title,category,price,description,image_url,gallery_images,created_at";
 
@@ -67,6 +73,17 @@ function createVariantDraft(label = "") {
   };
 }
 
+function getFileSummary(files = []) {
+  if (!files.length) {
+    return "No images selected yet.";
+  }
+
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  const sizeInMb = totalSize / (1024 * 1024);
+
+  return `${files.length} image${files.length === 1 ? "" : "s"} selected · ${sizeInMb.toFixed(1)} MB before compression`;
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -78,7 +95,14 @@ export default function AdminPage() {
   const [products, setProducts] = useState([]);
   const [inquiries, setInquiries] = useState([]);
   const [productVariantCounts, setProductVariantCounts] = useState({});
-  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [inquiriesLoading, setInquiriesLoading] = useState(false);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [productsLoaded, setProductsLoaded] = useState(false);
+  const [inquiriesLoaded, setInquiriesLoaded] = useState(false);
+  const [analyticsLoaded, setAnalyticsLoaded] = useState(false);
+  const [productsLoadedPage, setProductsLoadedPage] = useState(null);
+  const [inquiriesLoadedPage, setInquiriesLoadedPage] = useState(null);
   const [productPage, setProductPage] = useState(1);
   const [productCount, setProductCount] = useState(0);
   const [inquiryPage, setInquiryPage] = useState(1);
@@ -110,6 +134,12 @@ export default function AdminPage() {
   const [existingVariants, setExistingVariants] = useState([]);
   const [editingProductId, setEditingProductId] = useState(null);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({
+    active: false,
+    label: "",
+    current: 0,
+    total: 0,
+  });
 
   const productTotalPages = Math.max(
     1,
@@ -120,7 +150,7 @@ export default function AdminPage() {
     Math.ceil(inquiryCount / INQUIRY_PAGE_SIZE)
   );
 
-  async function checkUserSession() {
+  const checkUserSession = useCallback(async () => {
     const { session, error } = await getSessionSafely(supabase);
 
     if (!session) {
@@ -142,32 +172,35 @@ export default function AdminPage() {
 
     setUser(session.user);
     setCheckingAuth(false);
-  }
+  }, [router, supabase]);
 
   useEffect(() => {
     checkUserSession();
-  }, []);
+  }, [checkUserSession]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || activeTab !== "products") return;
+    if (productsLoaded && productsLoadedPage === productPage) return;
 
     fetchProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productPage, user]);
+  }, [activeTab, productPage, productsLoaded, productsLoadedPage, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || activeTab !== "inquiries") return;
+    if (inquiriesLoaded && inquiriesLoadedPage === inquiryPage) return;
 
     fetchInquiries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inquiryPage, user]);
+  }, [activeTab, inquiriesLoaded, inquiriesLoadedPage, inquiryPage, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || (activeTab !== "overview" && activeTab !== "analytics")) return;
+    if (analyticsLoaded) return;
 
     fetchAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [activeTab, analyticsLoaded, user]);
 
   useEffect(() => {
     if (productPage > productTotalPages) {
@@ -191,73 +224,89 @@ export default function AdminPage() {
     setProductsLoading(true);
     const { from, to } = getPaginationRange(productPage, PRODUCT_PAGE_SIZE);
 
-    const { data, error, count } = await supabase
-      .from("products")
-      .select(ADMIN_PRODUCT_LIST_FIELDS, {
-        count: "exact",
-      })
-      .order("created_at", { ascending: false })
-      .range(from, to);
+    try {
+      const { data, error, count } = await supabase
+        .from("products")
+        .select(ADMIN_PRODUCT_LIST_FIELDS, {
+          count: "exact",
+        })
+        .order("created_at", { ascending: false })
+        .range(from, to);
 
-    if (error) {
+      if (error) {
+        throw error;
+      }
+
+      setProducts(data || []);
+      setProductCount(count || 0);
+
+      const productIds = (data || []).map((product) => product.id);
+
+      if (productIds.length === 0) {
+        setProductVariantCounts({});
+        setProductsLoaded(true);
+        setProductsLoadedPage(productPage);
+        return;
+      }
+
+      const { data: variants, error: variantError } = await supabase
+        .from("product_variants")
+        .select("product_id")
+        .in("product_id", productIds);
+
+      if (variantError) {
+        setProductVariantCounts({});
+        setProductsLoaded(true);
+        setProductsLoadedPage(productPage);
+        return;
+      }
+
+      setProductVariantCounts(
+        (variants || []).reduce((counts, variant) => {
+          counts[variant.product_id] = (counts[variant.product_id] || 0) + 1;
+          return counts;
+        }, {})
+      );
+      setProductsLoaded(true);
+      setProductsLoadedPage(productPage);
+    } catch (error) {
       toast.error(error.message);
+    } finally {
       setProductsLoading(false);
-      return;
     }
-
-    setProducts(data || []);
-    setProductCount(count || 0);
-
-    const productIds = (data || []).map((product) => product.id);
-
-    if (productIds.length === 0) {
-      setProductVariantCounts({});
-      setProductsLoading(false);
-      return;
-    }
-
-    const { data: variants, error: variantError } = await supabase
-      .from("product_variants")
-      .select("product_id")
-      .in("product_id", productIds);
-
-    if (variantError) {
-      setProductVariantCounts({});
-      setProductsLoading(false);
-      return;
-    }
-
-    setProductVariantCounts(
-      (variants || []).reduce((counts, variant) => {
-        counts[variant.product_id] = (counts[variant.product_id] || 0) + 1;
-        return counts;
-      }, {})
-    );
-    setProductsLoading(false);
   }
 
   async function fetchInquiries() {
+    setInquiriesLoading(true);
     const { from, to } = getPaginationRange(inquiryPage, INQUIRY_PAGE_SIZE);
 
-    const { data, error, count } = await supabase
-      .from("checkout_inquiries")
-      .select(
-        "id,created_at,order_number,status,customer_name,customer_phone,customer_email,delivery_address,items,total_amount",
-        { count: "exact" }
-      )
-      .order("created_at", { ascending: false })
-      .range(from, to);
+    try {
+      const { data, error, count } = await supabase
+        .from("checkout_inquiries")
+        .select(
+          "id,created_at,order_number,status,customer_name,customer_phone,customer_email,delivery_address,items,total_amount",
+          { count: "exact" }
+        )
+        .order("created_at", { ascending: false })
+        .range(from, to);
 
-    if (error) {
+      if (error) {
+        throw error;
+      }
+
+      setInquiries(data || []);
+      setInquiryCount(count || 0);
+      setInquiriesLoaded(true);
+      setInquiriesLoadedPage(inquiryPage);
+    } catch (error) {
       toast.error(error.message);
-      return;
+    } finally {
+      setInquiriesLoading(false);
     }
-
-    setInquiries(data || []);
-    setInquiryCount(count || 0);
   }
 
   async function fetchAnalytics() {
+    setAnalyticsLoading(true);
     const { data: rpcAnalytics, error: rpcError } = await supabase.rpc(
       "get_admin_analytics"
     );
@@ -282,6 +331,8 @@ export default function AdminPage() {
         cancelledInquiries: Number(rpcRow.cancelled_inquiries || 0),
         estimatedRevenue: Number(rpcRow.estimated_revenue || 0),
       });
+      setAnalyticsLoaded(true);
+      setAnalyticsLoading(false);
       return;
     }
 
@@ -388,22 +439,41 @@ export default function AdminPage() {
         cancelledInquiries,
         estimatedRevenue,
       });
+      setAnalyticsLoaded(true);
     } catch (error) {
       toast.error(error.message);
+    } finally {
+      setAnalyticsLoading(false);
     }
   }
 
-  async function uploadImages(files) {
+  async function uploadImages(files, label = "Uploading images") {
     const uploadedImageUrls = [];
+    const fileList = Array.from(files || []);
 
-    for (const file of files) {
-      const compressedFile = await imageCompression(file, {
-        maxSizeMB: 0.8,
-        maxWidthOrHeight: 1600,
-        useWebWorker: true,
+    for (const [index, file] of fileList.entries()) {
+      const current = index + 1;
+
+      setUploadProgress({
+        active: true,
+        label: `${label}: optimizing image ${current} of ${fileList.length}`,
+        current: index,
+        total: fileList.length,
       });
 
+      const compressedFile = await imageCompression(
+        file,
+        PRODUCT_IMAGE_COMPRESSION_OPTIONS
+      );
+
       const safeFileName = createSafeFileName(compressedFile.name);
+
+      setUploadProgress({
+        active: true,
+        label: `${label}: uploading image ${current} of ${fileList.length}`,
+        current,
+        total: fileList.length,
+      });
 
       const { error: uploadError } = await supabase.storage
         .from("products")
@@ -471,7 +541,7 @@ export default function AdminPage() {
       const uploadedImages = await uploadImages([
         ...variant.imageFiles,
         ...variant.galleryFiles,
-      ]);
+      ], variant.variant_label.trim());
 
       variantRows.push({
         product_id: productId,
@@ -549,6 +619,12 @@ export default function AdminPage() {
     setImageFiles([]);
     setVariantDrafts([createVariantDraft("Print A")]);
     setExistingVariants([]);
+    setUploadProgress({
+      active: false,
+      label: "",
+      current: 0,
+      total: 0,
+    });
   }
 
   async function fetchProductVariants(productId) {
@@ -622,8 +698,9 @@ export default function AdminPage() {
     }
 
     toast.success("Product deleted successfully.");
+    setProductsLoaded(false);
+    setAnalyticsLoaded(false);
     fetchProducts();
-    fetchAnalytics();
   }
 
   async function handleUploadProduct(e) {
@@ -645,7 +722,10 @@ export default function AdminPage() {
         };
 
         if (imageFiles.length > 0) {
-          const uploadedImageUrls = await uploadImages(imageFiles);
+          const uploadedImageUrls = await uploadImages(
+            imageFiles,
+            "Product images"
+          );
           updatedProduct.image_url = uploadedImageUrls[0];
           updatedProduct.gallery_images = uploadedImageUrls;
         }
@@ -663,8 +743,8 @@ export default function AdminPage() {
         await saveProductVariants(editingProductId);
         resetForm();
         toast.success("Product updated successfully.");
-        fetchProducts();
-        fetchAnalytics();
+        setProductsLoaded(false);
+        setAnalyticsLoaded(false);
         setActiveTab("products");
         return;
       }
@@ -674,7 +754,7 @@ export default function AdminPage() {
         return;
       }
 
-      const uploadedImageUrls = await uploadImages(imageFiles);
+      const uploadedImageUrls = await uploadImages(imageFiles, "Product images");
 
       const { data: insertedProduct, error } = await supabase
         .from("products")
@@ -699,13 +779,19 @@ export default function AdminPage() {
       await saveProductVariants(insertedProduct.id);
       resetForm();
       toast.success("Product uploaded successfully.");
-      fetchProducts();
-      fetchAnalytics();
+      setProductsLoaded(false);
+      setAnalyticsLoaded(false);
       setActiveTab("products");
     } catch (error) {
       toast.error(error.message);
     } finally {
       setIsSavingProduct(false);
+      setUploadProgress({
+        active: false,
+        label: "",
+        current: 0,
+        total: 0,
+      });
     }
   }
 
@@ -721,8 +807,9 @@ export default function AdminPage() {
     }
 
     toast.success("Order status updated.");
+    setInquiriesLoaded(false);
+    setAnalyticsLoaded(false);
     fetchInquiries();
-    fetchAnalytics();
   }
 
   function formatPhoneForWhatsApp(phone) {
@@ -830,6 +917,10 @@ export default function AdminPage() {
         {activeTab === "analytics" && (
           <div>
             <h4 className="fw-bold mb-4">Business Analytics</h4>
+
+            {analyticsLoading && !analyticsLoaded && (
+              <p className="text-muted">Loading analytics...</p>
+            )}
 
             <div className="row g-4">
               <div className="col-md-4">
@@ -1065,13 +1156,17 @@ export default function AdminPage() {
 
               <input
                 type="file"
-                className="form-control"
+                className="form-control admin-file-input"
                 accept="image/*"
                 multiple
                 onChange={(e) => setImageFiles(Array.from(e.target.files))}
                 required={!editingProductId}
                 disabled={isSavingProduct}
               />
+
+              <p className="admin-file-help mb-0 mt-2">
+                {getFileSummary(imageFiles)}
+              </p>
             </div>
 
             {supportsPrintVariants(category) && (
@@ -1166,7 +1261,7 @@ export default function AdminPage() {
                         <label className="form-label">Variant Image</label>
                         <input
                           type="file"
-                          className="form-control"
+                          className="form-control admin-file-input"
                           accept="image/*"
                           onChange={(e) =>
                             updateVariantDraft(variant.clientId, {
@@ -1175,6 +1270,9 @@ export default function AdminPage() {
                           }
                           disabled={isSavingProduct}
                         />
+                        <p className="admin-file-help mb-0 mt-2">
+                          {getFileSummary(variant.imageFiles)}
+                        </p>
                       </div>
 
                       <div className="col-md-6">
@@ -1183,7 +1281,7 @@ export default function AdminPage() {
                         </label>
                         <input
                           type="file"
-                          className="form-control"
+                          className="form-control admin-file-input"
                           accept="image/*"
                           multiple
                           onChange={(e) =>
@@ -1193,6 +1291,9 @@ export default function AdminPage() {
                           }
                           disabled={isSavingProduct}
                         />
+                        <p className="admin-file-help mb-0 mt-2">
+                          {getFileSummary(variant.galleryFiles)}
+                        </p>
                       </div>
 
                       <div className="col-md-8">
@@ -1244,6 +1345,28 @@ export default function AdminPage() {
             )}
 
             <div className="admin-form-actions">
+              {uploadProgress.active && (
+                <div
+                  className="admin-upload-progress"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span>{uploadProgress.label}</span>
+                  {uploadProgress.total > 0 && (
+                    <div className="admin-upload-progress-track">
+                      <span
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            (uploadProgress.current / uploadProgress.total) * 100
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button className="btn btn-dark" disabled={isSavingProduct}>
                 {isSavingProduct
                   ? editingProductId
@@ -1268,7 +1391,9 @@ export default function AdminPage() {
               </p>
             </div>
 
-            {inquiries.length === 0 ? (
+            {inquiriesLoading && !inquiriesLoaded ? (
+              <p className="text-muted">Loading orders...</p>
+            ) : inquiries.length === 0 ? (
               <p className="text-muted">No orders yet.</p>
             ) : (
               <>
@@ -1464,7 +1589,7 @@ We are contacting you regarding your order.`;
             </div>
 
             <div className="admin-product-grid">
-              {productsLoading &&
+              {(productsLoading || !productsLoaded) &&
                 Array.from({ length: PRODUCT_PAGE_SIZE }, (_, index) => (
                   <article
                     className="admin-product-card admin-product-card-skeleton"
@@ -1479,7 +1604,7 @@ We are contacting you regarding your order.`;
                   </article>
                 ))}
 
-              {!productsLoading && products.map((product) => {
+              {productsLoaded && !productsLoading && products.map((product) => {
                 const imageCount = product.gallery_images?.length || 1;
                 const variantCount = productVariantCounts[product.id] || 0;
 
@@ -1533,12 +1658,12 @@ We are contacting you regarding your order.`;
                 );
               })}
 
-              {!productsLoading && products.length === 0 && (
+              {productsLoaded && !productsLoading && products.length === 0 && (
                 <p className="text-muted">No products uploaded yet.</p>
               )}
             </div>
 
-            {!productsLoading && productTotalPages > 1 && (
+            {productsLoaded && !productsLoading && productTotalPages > 1 && (
               <div className="shop-pagination">
                 <button
                   type="button"

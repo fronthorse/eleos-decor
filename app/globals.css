@@ -1807,11 +1807,47 @@ body {
 
 .admin-form-actions {
   display: flex;
+  align-items: center;
+  gap: 12px;
   justify-content: flex-end;
 }
 
 .admin-form-actions .btn {
   min-width: 180px;
+}
+
+.admin-file-input {
+  cursor: pointer;
+}
+
+.admin-file-help {
+  color: rgba(31, 31, 31, 0.52);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.admin-upload-progress {
+  display: grid;
+  min-width: min(100%, 320px);
+  gap: 7px;
+  color: rgba(31, 31, 31, 0.68);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.admin-upload-progress-track {
+  overflow: hidden;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(31, 31, 31, 0.08);
+}
+
+.admin-upload-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--eleos-gold);
+  transition: width 0.2s ease;
 }
 
 .admin-product-grid {
@@ -6223,11 +6259,22 @@ body {
   }
 
   .admin-form-actions {
+    gap: 10px;
     justify-content: stretch;
+    flex-direction: column;
   }
 
   .admin-form-actions .btn {
     width: 100%;
+  }
+
+  .admin-upload-progress {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .admin-file-input {
+    font-size: 0.86rem;
   }
 
   .admin-variant-panel > .d-flex {
