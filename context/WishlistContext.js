@@ -15,6 +15,7 @@ import { getProductPreviewImageSrc } from "../lib/productImages";
 
 const WishlistContext = createContext();
 const GUEST_WISHLIST_KEY = "eleos_guest_wishlist";
+const WISHLIST_PRODUCT_FIELDS = "id,title,category,price,image_url";
 
 function normalizeProductId(productId) {
   return String(productId || "");
@@ -134,7 +135,7 @@ export function WishlistProvider({ children }) {
 
     const { data: products, error: productsError } = await supabase
       .from("products")
-      .select("*")
+      .select(WISHLIST_PRODUCT_FIELDS)
       .in("id", productIds);
 
     if (productsError) {

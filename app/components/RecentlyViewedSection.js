@@ -37,9 +37,7 @@ export default function RecentlyViewedSection({ currentProductId }) {
 
       const { data, error } = await supabase
         .from("products")
-        .select(
-          "id,title,category,description,price,image_url,gallery_images,thumbnail_url,thumbnail_image"
-        )
+        .select("id,title,category,description,price,image_url")
         .in("id", savedIds);
 
       if (cancelled) {

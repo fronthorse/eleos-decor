@@ -26,6 +26,8 @@ import {
 
 const PAGE_SIZE = 24;
 const SEARCH_DEBOUNCE_MS = 450;
+const PRODUCT_LIST_FIELDS =
+  "id,title,category,description,price,image_url,created_at";
 
 const shopSpaces = SHOP_SPACE_FILTERS;
 const styledCollections = STYLED_COLLECTION_FILTERS;
@@ -188,7 +190,7 @@ function ShopContent() {
         const tierLimit = Math.min(remainingLimit, tier.count - remainingOffset);
         let productsQuery = supabase
           .from("products")
-          .select("*")
+          .select(PRODUCT_LIST_FIELDS)
           .in("category", tier.categories);
 
         productsQuery = applyProductSearchFilter(productsQuery, cleanSearch);
@@ -288,7 +290,7 @@ function ShopContent() {
 
     let query = supabase
       .from("products")
-      .select("*", {
+      .select(PRODUCT_LIST_FIELDS, {
         count: "exact",
       });
 
@@ -624,7 +626,28 @@ function ShopContent() {
 
 export default function ShopPage() {
   return (
-    <Suspense fallback={<p className="text-center py-5">Loading shop...</p>}>
+    <Suspense
+      fallback={
+        <>
+          <Navbar />
+          <section className="shop-page-section">
+            <div className="container">
+              <div className="row g-3 g-lg-4 shop-product-grid">
+                {Array.from({ length: 12 }, (_, index) => index + 1).map(
+                  (item) => (
+                    <ProductSkeleton
+                      key={item}
+                      columnClassName="col-6 col-md-4 col-xl-3"
+                    />
+                  )
+                )}
+              </div>
+            </div>
+          </section>
+          <Footer />
+        </>
+      }
+    >
       <ShopContent />
     </Suspense>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
@@ -24,6 +24,8 @@ import imageCompression from "browser-image-compression";
 
 const PRODUCT_PAGE_SIZE = 12;
 const INQUIRY_PAGE_SIZE = 10;
+const ADMIN_PRODUCT_LIST_FIELDS =
+  "id,title,category,price,description,image_url,gallery_images,created_at";
 
 const REVENUE_STATUS_VALUES = ["paid", "processing", "delivered"];
 
@@ -67,7 +69,7 @@ function createVariantDraft(label = "") {
 
 export default function AdminPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -76,6 +78,7 @@ export default function AdminPage() {
   const [products, setProducts] = useState([]);
   const [inquiries, setInquiries] = useState([]);
   const [productVariantCounts, setProductVariantCounts] = useState({});
+  const [productsLoading, setProductsLoading] = useState(true);
   const [productPage, setProductPage] = useState(1);
   const [productCount, setProductCount] = useState(0);
   const [inquiryPage, setInquiryPage] = useState(1);
@@ -185,11 +188,12 @@ export default function AdminPage() {
   }
 
   async function fetchProducts() {
+    setProductsLoading(true);
     const { from, to } = getPaginationRange(productPage, PRODUCT_PAGE_SIZE);
 
     const { data, error, count } = await supabase
       .from("products")
-      .select("*", {
+      .select(ADMIN_PRODUCT_LIST_FIELDS, {
         count: "exact",
       })
       .order("created_at", { ascending: false })
@@ -197,6 +201,7 @@ export default function AdminPage() {
 
     if (error) {
       toast.error(error.message);
+      setProductsLoading(false);
       return;
     }
 
@@ -207,6 +212,7 @@ export default function AdminPage() {
 
     if (productIds.length === 0) {
       setProductVariantCounts({});
+      setProductsLoading(false);
       return;
     }
 
@@ -217,6 +223,7 @@ export default function AdminPage() {
 
     if (variantError) {
       setProductVariantCounts({});
+      setProductsLoading(false);
       return;
     }
 
@@ -226,6 +233,7 @@ export default function AdminPage() {
         return counts;
       }, {})
     );
+    setProductsLoading(false);
   }
 
   async function fetchInquiries() {
@@ -1456,7 +1464,22 @@ We are contacting you regarding your order.`;
             </div>
 
             <div className="admin-product-grid">
-              {products.map((product) => {
+              {productsLoading &&
+                Array.from({ length: PRODUCT_PAGE_SIZE }, (_, index) => (
+                  <article
+                    className="admin-product-card admin-product-card-skeleton"
+                    key={index}
+                  >
+                    <div className="admin-product-thumb skeleton" />
+
+                    <div className="admin-product-content">
+                      <div className="skeleton skeleton-title" />
+                      <div className="skeleton skeleton-button" />
+                    </div>
+                  </article>
+                ))}
+
+              {!productsLoading && products.map((product) => {
                 const imageCount = product.gallery_images?.length || 1;
                 const variantCount = productVariantCounts[product.id] || 0;
 
@@ -1510,12 +1533,12 @@ We are contacting you regarding your order.`;
                 );
               })}
 
-              {products.length === 0 && (
+              {!productsLoading && products.length === 0 && (
                 <p className="text-muted">No products uploaded yet.</p>
               )}
             </div>
 
-            {productTotalPages > 1 && (
+            {!productsLoading && productTotalPages > 1 && (
               <div className="shop-pagination">
                 <button
                   type="button"

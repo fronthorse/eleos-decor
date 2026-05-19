@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
@@ -26,6 +26,9 @@ const ORDER_PROGRESS_STEPS = [
   { status: "processing", label: "Delivery" },
   { status: "delivered", label: "Delivered" },
 ];
+const DASHBOARD_ORDER_FIELDS =
+  "id,created_at,order_number,status,items,total_amount";
+const DASHBOARD_ORDER_LIMIT = 20;
 
 function formatNaira(value) {
   return `\u20a6${Number(value || 0).toLocaleString()}`;
@@ -50,7 +53,7 @@ function summarizeOrderItems(items) {
 
 export default function CustomerDashboardPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const { cartItems } = useCart();
   const { wishlistIds } = useWishlist();
@@ -86,9 +89,10 @@ export default function CustomerDashboardPage() {
   async function fetchOrders(userId) {
     const { data, error } = await supabase
       .from("checkout_inquiries")
-      .select("*")
+      .select(DASHBOARD_ORDER_FIELDS)
       .eq("user_id", userId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(DASHBOARD_ORDER_LIMIT);
 
     if (error) {
       console.error(error.message);

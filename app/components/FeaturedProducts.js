@@ -1,19 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ProductCard from "./ProductCard";
 import { createClient } from "../../lib/supabase/client";
 import ProductSkeleton from ".././components/ProductSkeleton";
 
+const PRODUCT_LIST_FIELDS =
+  "id,title,category,description,price,image_url,created_at";
+
 export default function FeaturedProducts() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  async function fetchFeaturedProducts() {
+  const fetchFeaturedProducts = useCallback(async () => {
     const { data, error } = await supabase
       .from("products")
-      .select("*")
+      .select(PRODUCT_LIST_FIELDS)
       .order("created_at", { ascending: false })
       .limit(3);
 
@@ -25,11 +28,11 @@ export default function FeaturedProducts() {
 
     setFeaturedProducts(data);
     setLoading(false);
-  }
+  }, [supabase]);
 
   useEffect(() => {
     fetchFeaturedProducts();
-  }, []);
+  }, [fetchFeaturedProducts]);
 
   return (
     <section className="home-featured-products" data-aos="fade-up">
