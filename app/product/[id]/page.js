@@ -1,10 +1,11 @@
+import dynamic from "next/dynamic";
+import Link from "next/link";
+import { notFound } from "next/navigation";
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 import ProductCard from "../../components/ProductCard";
 import ProductPurchaseExperience from "../../components/ProductPurchaseExperience";
-import ProductReviews from "../../components/ProductReviews";
 import TrackRecentlyViewed from "../../components/TrackRecentlyViewed";
-import RecentlyViewedSection from "../../components/RecentlyViewedSection";
 
 import { createClient } from "../../../lib/supabase/server";
 import {
@@ -12,17 +13,36 @@ import {
   DEFAULT_SEO_DESCRIPTION,
   SITE_NAME,
   absoluteUrl,
+  buildProductImageAlt,
   buildProductReviewSchema,
+  buildProductSeoDescription,
+  buildProductSeoTitle,
   getProductAvailability,
   getProductOfferMerchantSchema,
   getProductImage,
-  normalizeDescription,
+  getProductSchemaImages,
   normalizePrice,
 } from "../../../lib/seo";
 import {
   normalizeProductVariants,
   supportsPrintVariants,
 } from "../../../lib/productVariants";
+import {
+  getCuratedFilterHref,
+  getProductStyleScore,
+  SHOP_SPACE_FILTERS,
+  STYLED_COLLECTION_FILTERS,
+} from "../../../lib/shopCuration";
+
+const ProductReviews = dynamic(() => import("../../components/ProductReviews"), {
+  loading: () => null,
+});
+const RecentlyViewedSection = dynamic(
+  () => import("../../components/RecentlyViewedSection"),
+  {
+    loading: () => null,
+  }
+);
 
 const COMPLETE_LOOK_CATEGORY_MAP = {
   "dining sets": ["Scented Candles", "Flowers", "Ornaments", "Diffusers"],
@@ -48,6 +68,8 @@ const DEFAULT_COMPLETE_LOOK_CATEGORIES = [
   "Frames",
   "Plants",
 ];
+const PRODUCT_RELATED_FIELDS =
+  "id,title,category,description,price,image_url,created_at";
 
 function normalizeCategoryKey(category) {
   return String(category || "").toLowerCase().trim();
@@ -88,43 +110,34 @@ function getStylingStory(category) {
 
 async function getCompleteLookProducts(supabase, product) {
   const categories = getCompleteLookCategories(product.category);
-  const selectedProducts = [];
-  const selectedIds = new Set([String(product.id)]);
 
-  for (const category of categories) {
-    if (selectedProducts.length >= 4) {
-      break;
-    }
-
-    const { data, error } = await supabase
-      .from("products")
-      .select("*")
-      .eq("category", category)
-      .neq("id", product.id)
-      .order("created_at", { ascending: false })
-      .limit(4 - selectedProducts.length);
-
-    if (error) {
-      console.warn("Unable to fetch complete-the-look products.", error.message);
-      continue;
-    }
-
-    (data || []).forEach((item) => {
-      const itemId = String(item.id);
-
-      if (!selectedIds.has(itemId) && selectedProducts.length < 4) {
-        selectedIds.add(itemId);
-        selectedProducts.push(item);
-      }
-    });
+  if (!categories.length) {
+    return [];
   }
 
-  return selectedProducts;
+  const { data, error } = await supabase
+    .from("products")
+    .select(PRODUCT_RELATED_FIELDS)
+    .in("category", categories)
+    .neq("id", product.id)
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  if (error) {
+    console.warn("Unable to fetch complete-the-look products.", error.message);
+    return [];
+  }
+
+  return (data || [])
+    .sort((first, second) => {
+      return (
+        categories.indexOf(first.category) - categories.indexOf(second.category)
+      );
+    })
+    .slice(0, 4);
 }
 
-async function getProductById(id) {
-  const supabase = await createClient();
-
+async function getProductById(supabase, id) {
   const { data: product, error } = await supabase
     .from("products")
     .select("*")
@@ -138,14 +151,13 @@ async function getProductById(id) {
   return product;
 }
 
-async function getProductReviews(productId) {
-  const supabase = await createClient();
-
+async function getProductReviewsForSchema(supabase, productId) {
   const { data, error } = await supabase
     .from("reviews")
     .select("id,customer_name,rating,comment,created_at")
     .eq("product_id", productId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(20);
 
   if (error) {
     console.warn("Unable to fetch product reviews for JSON-LD.", error.message);
@@ -155,12 +167,10 @@ async function getProductReviews(productId) {
   return data || [];
 }
 
-async function getProductVariants(product) {
+async function getProductVariants(supabase, product) {
   if (!supportsPrintVariants(product)) {
     return [];
   }
-
-  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("product_variants")
@@ -180,9 +190,61 @@ async function getProductVariants(product) {
   return normalizeProductVariants(data || []);
 }
 
+function getProductCategoryHref(category) {
+  return category ? `/shop?category=${encodeURIComponent(category)}` : "/shop";
+}
+
+function productMatchesCuratedFilter(product, filter) {
+  const tiers = filter.tiers || [];
+  const category = product.category;
+  const categoryMatch = tiers.some((tier) =>
+    (tier.categories || []).includes(category)
+  );
+
+  if (categoryMatch) {
+    return true;
+  }
+
+  return getProductStyleScore(product, filter.styleKeywords || []) > 0;
+}
+
+function getProductDiscoveryLinks(product) {
+  const categoryLinks = product.category
+    ? [
+        {
+          label: `${product.category} category`,
+          href: getProductCategoryHref(product.category),
+        },
+      ]
+    : [];
+  const roomLinks = SHOP_SPACE_FILTERS.filter((space) =>
+    productMatchesCuratedFilter(product, space)
+  )
+    .slice(0, 3)
+    .map((space) => ({
+      label: `${space.label} decor`,
+      href: getCuratedFilterHref("space", space.slug),
+    }));
+  const collectionLinks = STYLED_COLLECTION_FILTERS.filter((collection) =>
+    productMatchesCuratedFilter(product, collection)
+  )
+    .slice(0, 3)
+    .map((collection) => ({
+      label: collection.title,
+      href: getCuratedFilterHref("collection", collection.slug),
+    }));
+
+  return {
+    categoryLinks,
+    roomLinks,
+    collectionLinks,
+  };
+}
+
 export async function generateMetadata({ params }) {
   const { id } = await params;
-  const product = await getProductById(id);
+  const supabase = await createClient();
+  const product = await getProductById(supabase, id);
   const canonicalPath = `/product/${id}`;
 
   if (!product) {
@@ -211,9 +273,10 @@ export async function generateMetadata({ params }) {
     };
   }
 
-  const title = product.title || "Decor Product";
-  const description = normalizeDescription(product.description);
+  const title = buildProductSeoTitle(product);
+  const description = buildProductSeoDescription(product);
   const image = getProductImage(product);
+  const imageAlt = buildProductImageAlt(product);
   const price = normalizePrice(product.price);
   const availability = getProductAvailability(product);
 
@@ -234,7 +297,7 @@ export async function generateMetadata({ params }) {
           url: image,
           width: 1200,
           height: 630,
-          alt: title,
+          alt: imageAlt,
         },
       ],
     },
@@ -263,58 +326,48 @@ export default async function ProductDetails({ params }) {
   const supabase = await createClient();
   const { id } = await params;
 
-  const product = await getProductById(id);
+  const product = await getProductById(supabase, id);
 
   if (!product) {
-    return (
-      <>
-        <Navbar />
-
-        <section className="luxury-section" style={{ marginTop: "90px" }}>
-          <div className="container text-center">
-            <h1 className="fw-bold">Product not found</h1>
-
-            <p className="text-muted">
-              This product may have been removed or is no longer available.
-            </p>
-
-            <a href="/shop" className="btn btn-dark mt-3">
-              Back to Shop
-            </a>
-          </div>
-        </section>
-
-        <Footer />
-      </>
-    );
+    notFound();
   }
 
-  const { data: similarProducts } = await supabase
-    .from("products")
-    .select("*")
-    .eq("category", product.category)
-    .neq("id", product.id)
-    .order("created_at", { ascending: false })
-    .limit(4);
-  const completeLookProducts = await getCompleteLookProducts(supabase, product);
-  const productVariants = await getProductVariants(product);
+  const [
+    { data: similarProducts },
+    completeLookProducts,
+    productVariants,
+    productReviews,
+  ] = await Promise.all([
+    supabase
+      .from("products")
+      .select(PRODUCT_RELATED_FIELDS)
+      .eq("category", product.category)
+      .neq("id", product.id)
+      .order("created_at", { ascending: false })
+      .limit(4),
+    getCompleteLookProducts(supabase, product),
+    getProductVariants(supabase, product),
+    getProductReviewsForSchema(supabase, product.id),
+  ]);
+  const discoveryLinks = getProductDiscoveryLinks(product);
   const productForExperience = {
     ...product,
     stylingStory: getStylingStory(product.category),
+    imageAlt: buildProductImageAlt(product),
   };
 
   const productUrl = absoluteUrl(`/product/${product.id}`);
-  const productDescription = normalizeDescription(product.description);
-  const productImage = getProductImage(product);
+  const productDescription = buildProductSeoDescription(product);
+  const productImages = getProductSchemaImages(product);
   const productPrice = normalizePrice(product.price);
-  const productReviews = await getProductReviews(product.id);
   const productReviewSchema = buildProductReviewSchema(productReviews);
   const productSchema = {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.title,
     description: productDescription,
-    image: [productImage],
+    image: productImages,
+    category: product.category,
     brand: {
       "@type": "Brand",
       name: SITE_NAME,
@@ -346,6 +399,18 @@ export default async function ProductDetails({ params }) {
 
       <section className="product-editorial-hero product-details-section">
         <div className="container">
+          <nav className="product-breadcrumbs" aria-label="Product breadcrumb">
+            <Link href="/shop">Shop</Link>
+            {product.category && (
+              <>
+                <span>/</span>
+                <Link href={getProductCategoryHref(product.category)}>
+                  {product.category}
+                </Link>
+              </>
+            )}
+          </nav>
+
           <div className="product-editorial-layout">
             <ProductPurchaseExperience
               product={productForExperience}
@@ -354,6 +419,35 @@ export default async function ProductDetails({ params }) {
           </div>
         </div>
       </section>
+
+      {(discoveryLinks.roomLinks.length > 0 ||
+        discoveryLinks.collectionLinks.length > 0 ||
+        discoveryLinks.categoryLinks.length > 0) && (
+        <section className="product-editorial-section product-discovery-section">
+          <div className="container">
+            <div className="product-section-heading">
+              <p className="section-label">Explore More</p>
+              <h2>Find pieces for the same style</h2>
+              <p>
+                Continue through related categories, room edits, and styled
+                collections that match this product.
+              </p>
+            </div>
+
+            <div className="product-discovery-links">
+              {[
+                ...discoveryLinks.categoryLinks,
+                ...discoveryLinks.roomLinks,
+                ...discoveryLinks.collectionLinks,
+              ].map((link) => (
+                <Link key={link.href} href={link.href}>
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {completeLookProducts.length > 0 && (
         <section className="product-editorial-section">
@@ -391,7 +485,7 @@ export default async function ProductDetails({ params }) {
         </section>
       )}
 
-      <ProductReviews productId={product.id} />
+      <ProductReviews productId={product.id} initialReviews={productReviews} />
 
       {similarProducts && similarProducts.length > 0 && (
         <section className="product-editorial-section product-related-section">

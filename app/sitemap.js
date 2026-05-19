@@ -1,5 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import { absoluteUrl } from "../lib/seo";
+import {
+  getCuratedFilterHref,
+  SHOP_SPACE_FILTERS,
+  STYLED_COLLECTION_FILTERS,
+} from "../lib/shopCuration";
 
 export const revalidate = 3600;
 
@@ -19,6 +24,31 @@ function route(path, options = {}) {
   };
 }
 
+async function fetchSitemapProducts(supabase) {
+  const pageSize = 1000;
+  const products = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("products")
+      .select("id,category,created_at")
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    products.push(...(data || []));
+
+    if (!data || data.length < pageSize) {
+      break;
+    }
+  }
+
+  return products;
+}
+
 export default async function sitemap() {
   const staticRoutes = [
     route("/", { changeFrequency: "weekly", priority: 1 }),
@@ -30,15 +60,7 @@ export default async function sitemap() {
 
   try {
     const supabase = getPublicSupabaseClient();
-    const { data: products, error } = await supabase
-      .from("products")
-      .select("id,category,created_at")
-      .order("created_at", { ascending: false })
-      .limit(5000);
-
-    if (error || !products) {
-      return staticRoutes;
-    }
+    const products = await fetchSitemapProducts(supabase);
 
     const productRoutes = products
       .filter((product) => product.id)
@@ -65,7 +87,27 @@ export default async function sitemap() {
       })
     );
 
-    return [...staticRoutes, ...categoryRoutes, ...productRoutes];
+    const roomRoutes = SHOP_SPACE_FILTERS.map((space) =>
+      route(getCuratedFilterHref("space", space.slug), {
+        changeFrequency: "weekly",
+        priority: 0.72,
+      })
+    );
+
+    const collectionRoutes = STYLED_COLLECTION_FILTERS.map((collection) =>
+      route(getCuratedFilterHref("collection", collection.slug), {
+        changeFrequency: "weekly",
+        priority: 0.72,
+      })
+    );
+
+    return [
+      ...staticRoutes,
+      ...categoryRoutes,
+      ...roomRoutes,
+      ...collectionRoutes,
+      ...productRoutes,
+    ];
   } catch {
     return staticRoutes;
   }

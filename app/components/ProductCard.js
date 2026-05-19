@@ -9,10 +9,22 @@ import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
 import {
   getProductPreviewImageSrc,
+  getProductBalancedCardImageSrc,
   getProductCardImageSrc,
   PRODUCT_IMAGE_FALLBACK,
 } from "../../lib/productImages";
+import { buildProductImageAlt } from "../../lib/seo";
 import { supportsPrintVariants } from "../../lib/productVariants";
+
+function hasBalancedArtImage(category) {
+  const normalizedCategory = String(category || "").toLowerCase();
+
+  return (
+    supportsPrintVariants(category) ||
+    normalizedCategory.includes("frame") ||
+    normalizedCategory.includes("wall art")
+  );
+}
 
 export default function ProductCard({
   id,
@@ -29,12 +41,18 @@ export default function ProductCard({
 
   const saved = isInWishlist(id);
   const requiresPrintChoice = supportsPrintVariants(category);
+  const usesBalancedImage = hasBalancedArtImage(category);
   const cardClassName = `product-card h-100 ${
+    usesBalancedImage ? "product-card--art" : ""
+  } ${
     requiresPrintChoice ? "product-card--frame" : ""
   }`;
-  const optimizedImage = getProductCardImageSrc(image, thumbnailImage);
+  const optimizedImage = usesBalancedImage
+    ? getProductBalancedCardImageSrc(image)
+    : getProductCardImageSrc(image, thumbnailImage);
   const imageSrc =
     optimizedImage && !imageFailed ? optimizedImage : PRODUCT_IMAGE_FALLBACK;
+  const imageAlt = buildProductImageAlt({ title, category });
 
   useEffect(() => {
     setImageFailed(false);
@@ -98,7 +116,7 @@ export default function ProductCard({
             <Image
               src={imageSrc}
               className="product-image"
-              alt={title || "Product image"}
+              alt={imageAlt}
               width={640}
               height={512}
               loading="lazy"

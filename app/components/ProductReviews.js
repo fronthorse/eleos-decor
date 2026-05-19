@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { FaStar } from "react-icons/fa";
 import { createClient } from "../../lib/supabase/client";
+
+const RATING_LABELS = {
+  1: "Needs work",
+  2: "Fair",
+  3: "Lovely",
+  4: "Excellent",
+  5: "Exceptional",
+};
 
 function ReviewStars({ rating, className = "" }) {
   return (
@@ -17,7 +26,7 @@ function ReviewStars({ rating, className = "" }) {
             key={starValue}
             className={starValue <= Number(rating || 0) ? "active" : ""}
           >
-            ★
+            <FaStar aria-hidden="true" />
           </span>
         );
       })}
@@ -25,9 +34,9 @@ function ReviewStars({ rating, className = "" }) {
   );
 }
 
-export default function ProductReviews({ productId }) {
+export default function ProductReviews({ productId, initialReviews = [] }) {
   const supabase = useMemo(() => createClient(), []);
-  const [reviews, setReviews] = useState([]);
+  const [reviews, setReviews] = useState(initialReviews);
   const [customerName, setCustomerName] = useState("");
   const [rating, setRating] = useState(5);
   const [hoverRating, setHoverRating] = useState(0);
@@ -38,9 +47,10 @@ export default function ProductReviews({ productId }) {
   const fetchReviews = useCallback(async () => {
     const { data, error } = await supabase
       .from("reviews")
-      .select("*")
+      .select("id,customer_name,rating,comment,created_at")
       .eq("product_id", productId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(20);
 
     if (!error) {
       setReviews(data || []);
@@ -48,8 +58,12 @@ export default function ProductReviews({ productId }) {
   }, [productId, supabase]);
 
   useEffect(() => {
+    if (initialReviews.length > 0) {
+      return;
+    }
+
     fetchReviews();
-  }, [fetchReviews]);
+  }, [fetchReviews, initialReviews.length]);
 
   async function submitReview(e) {
     e.preventDefault();
@@ -75,6 +89,28 @@ export default function ProductReviews({ productId }) {
     setComment("");
     setMessage("Review submitted successfully.");
     fetchReviews();
+  }
+
+  function handleRatingKeyDown(event) {
+    if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setRating((current) => Math.min(5, current + 1));
+    }
+
+    if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+      event.preventDefault();
+      setRating((current) => Math.max(1, current - 1));
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault();
+      setRating(1);
+    }
+
+    if (event.key === "End") {
+      event.preventDefault();
+      setRating(5);
+    }
   }
 
   return (
@@ -151,49 +187,38 @@ export default function ProductReviews({ productId }) {
                   aria-label="Choose a rating"
                   onMouseLeave={() => setHoverRating(0)}
                 >
-                  {Array.from({ length: 5 }, (_, index) => {
-                    const starValue = index + 1;
+                  <div className="review-star-selector">
+                    {Array.from({ length: 5 }, (_, index) => {
+                      const starValue = index + 1;
 
-                    return (
-                      <button
-                        key={starValue}
-                        type="button"
-                        role="radio"
-                        aria-checked={rating === starValue}
-                        aria-label={`${starValue} star${
-                          starValue === 1 ? "" : "s"
-                        }`}
-                        className={`review-star-button ${
-                          starValue <= activeRating ? "active" : ""
-                        }`}
-                        onClick={() => setRating(starValue)}
-                        onFocus={() => setHoverRating(starValue)}
-                        onBlur={() => setHoverRating(0)}
-                        onMouseEnter={() => setHoverRating(starValue)}
-                        onKeyDown={(event) => {
-                          if (
-                            event.key === "ArrowRight" ||
-                            event.key === "ArrowUp"
-                          ) {
-                            event.preventDefault();
-                            setRating((current) => Math.min(5, current + 1));
-                          }
+                      return (
+                        <button
+                          key={starValue}
+                          type="button"
+                          role="radio"
+                          aria-checked={rating === starValue}
+                          aria-label={`${starValue} star${
+                            starValue === 1 ? "" : "s"
+                          } - ${RATING_LABELS[starValue]}`}
+                          className={`review-star-button ${
+                            starValue <= activeRating ? "active" : ""
+                          }`}
+                          onClick={() => setRating(starValue)}
+                          onFocus={() => setHoverRating(starValue)}
+                          onBlur={() => setHoverRating(0)}
+                          onMouseEnter={() => setHoverRating(starValue)}
+                          onKeyDown={handleRatingKeyDown}
+                        >
+                          <FaStar aria-hidden="true" />
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                          if (
-                            event.key === "ArrowLeft" ||
-                            event.key === "ArrowDown"
-                          ) {
-                            event.preventDefault();
-                            setRating((current) => Math.max(1, current - 1));
-                          }
-                        }}
-                      >
-                        ★
-                      </button>
-                    );
-                  })}
-
-                  <span className="review-rating-value">{rating} / 5</span>
+                  <span className="review-rating-value">
+                    {activeRating} / 5
+                    <strong>{RATING_LABELS[activeRating]}</strong>
+                  </span>
                 </div>
               </div>
 

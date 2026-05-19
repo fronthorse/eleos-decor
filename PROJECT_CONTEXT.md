@@ -133,6 +133,11 @@ Contains React Context providers such as:
 - Responsive homepage
 - Shop page with Supabase-side pagination, filtering, full-text search, and sorting
 - Shop URL params support page, category, search/query, and sort
+- Navbar Shop navigation uses a premium mega menu on desktop and an accordion on mobile
+- Desktop Shop text is a real /shop link; hover/focus opens the mega menu, and a separate chevron icon button supports menu access for keyboard users
+- Mobile Shop text navigates to /shop; a separate toggle opens the shop accordion
+- Mega menu uses category, room, and styled collection links from lib/navigationData.js plus a rotating featured product card
+- Mega menu glyphs use react-icons icons, not typed arrows or placeholder characters
 - Product detail pages
 - Product search uses Supabase RPC search_products with products.search_vector and GIN full-text index
 - Empty shop searches use normal paginated product fetch; non-empty searches use full-text RPC with ilike fallback
@@ -142,6 +147,7 @@ Contains React Context providers such as:
 - Image zoom
 - Product gallery support
 - Product detail/gallery images use Next Image optimization with priority main image, responsive sizes, skeleton loading, and fallback image handling
+- Product detail main images use Supabase render/image transformations for detail-friendly sizing; product cards use smaller transformed images or thumbnails where available
 - Product cards use Next Image and smaller Supabase transformed image URLs for thumbnails when available; product detail images remain high quality
 - Wall frame products support first-phase print variants through one canonical product page; variants are shown as "Choose Print" options such as Print A, Print B, and Print C rather than separate duplicate products
 - Shop/search/filter/pagination still operate on parent products only; do not fetch all variants globally or create duplicate shop/SEO entries per print
@@ -153,17 +159,22 @@ Contains React Context providers such as:
 - Public page metadata/canonicals exist for homepage, shop, about, contact, and return-policy
 - Return & Exchange Policy page is public and indexable at https://eleosdecor.com/return-policy for customer trust and future Google Merchant structured data references
 - Product detail pages generate dynamic metadata from Supabase products using products.title, description, image_url/gallery fallback, price, and availability
-- Product detail pages include product canonical URLs and product Open Graph images
+- Product detail pages build unique SEO titles and descriptions with product title, category, Nigeria context, and price where available
+- Product detail pages include product canonical URLs, product Open Graph images, and descriptive product image alt text
 - Product variants must stay within the canonical parent product URL, for example /product/[id]; do not create /print-a, /print-b, or other variant-specific indexed URLs
 - Product detail pages include Product JSON-LD with name, description, image, brand Eleos Decor, offer priceCurrency NGN, price when available, availability, canonical URL, and merchant offer details
+- Product JSON-LD includes product category and multiple gallery images when available
 - Product offer JSON-LD includes shippingDetails for Nigeria with realistic broad delivery estimates: 1-3 day handling time and 2-7 day transit time; do not promise same-day delivery in schema unless operations change
 - Product offer JSON-LD includes hasMerchantReturnPolicy for Nigeria with a 7-day finite return window, ReturnByMail method, ReturnFeesCustomerResponsibility, and merchantReturnLink pointing to https://eleosdecor.com/return-policy
 - Product detail JSON-LD conditionally includes aggregateRating and review only when real Supabase review data exists for that product
 - Product aggregateRating is calculated from real reviews.rating values; reviewCount is the count of valid real ratings
 - Product review schema uses real reviews.customer_name, reviews.rating, reviews.comment, and reviews.created_at, limits embedded reviews to avoid bloated JSON-LD, and never fabricates fake ratings or placeholder reviews
 - Products without reviews must omit aggregateRating and review entirely
+- Product pages include crawlable breadcrumbs, category links, room links, styled collection links, complete-the-look links, and similar product links to improve internal discovery
+- Missing product detail URLs should use Next.js notFound() so removed products return a real 404 instead of a soft 200 page
 - Product prices may be stored as formatted strings such as "500,000"; SEO helpers normalize them for metadata/schema without changing UI display
-- app/sitemap.js generates sitemap.xml with homepage, shop, about, contact, return-policy, category query URLs from product categories, and product detail URLs from Supabase
+- app/sitemap.js generates sitemap.xml with homepage, shop, about, contact, return-policy, category query URLs from product categories, room/collection shop URLs, and product detail URLs from Supabase
+- Sitemap product fetching is paginated so it can include all products beyond a single 5000-row limit
 - Sitemap generation uses public Supabase anon access and products fields id, category, and created_at; products.updated_at is not currently part of the table
 - app/robots.js generates a simplified robots.txt with Allow: /, private-route Disallow rules, and Sitemap: https://eleosdecor.com/sitemap.xml
 - robots.txt intentionally does not include a Host directive because Google does not use it
@@ -174,10 +185,11 @@ Contains React Context providers such as:
 
 ## SEO Files
 - lib/seo.js stores production SEO constants and shared helpers, including Product review/aggregateRating JSON-LD helpers and merchant offer schema helpers for shipping and returns
+- lib/seo.js also stores product SEO title/description/image-alt helpers and product schema image helpers
 - app/layout.js defines global metadata and social preview defaults
 - app/return-policy/page.js defines the public Return & Exchange Policy page with SEO metadata and canonical URL
 - app/product/[id]/page.js defines dynamic product metadata and Product JSON-LD
-- app/sitemap.js generates sitemap.xml with static, category, and product routes
+- app/sitemap.js generates sitemap.xml with static, category, room, collection, and product routes
 - app/robots.js generates production robots.txt
 - public/eleos-og-image.png is the default Open Graph/Twitter image fallback
 - public/eleos-og-image.svg is the editable source for the default social sharing image
@@ -464,6 +476,9 @@ Performance index SQL:
 - Supabase storage image URLs are configured in next.config.mjs remotePatterns
 - next.config.mjs also allows Supabase transformed image URLs under /storage/v1/render/image/public/**
 - SEO sitemap queries should avoid products.updated_at unless that column is added to Supabase
+- Product description quality affects indexing: current catalog audit found thin or duplicate descriptions on products such as IDs 52/51, 40/39/38, 32/31, 29/28/27/26, plus thin examples including IDs 24, 23, and 18
+- Keep Shop navbar link and mega menu trigger separate; do not turn the Shop link back into a button-only toggle
+- Review rating selection uses a modern icon-star selector with hover preview and keyboard Arrow/Home/End support; preserve radiogroup accessibility when editing
 - Keep robots.txt minimal: Allow: /, private route disallows with trailing slashes, and the production sitemap URL
 - Keep public canonicals pointed at https://eleosdecor.com paths through metadataBase
 - Supabase auth redirects

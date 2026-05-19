@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
+  getProductDetailImageSrc,
   getProductPreviewImageSrc,
   PRODUCT_IMAGE_FALLBACK,
 } from "../../lib/productImages";
@@ -28,7 +29,7 @@ export default function ProductGallery({ mainImage, galleryImages = [], title })
   const activeImage = safeImages[activeIndex] || safeImages[0];
   const displayImage = failedImages[activeImage]
     ? PRODUCT_IMAGE_FALLBACK
-    : activeImage;
+    : getProductDetailImageSrc(activeImage);
 
   useEffect(() => {
     setActiveIndex(0);
@@ -87,7 +88,7 @@ export default function ProductGallery({ mainImage, galleryImages = [], title })
           <Image
             key={displayImage}
             src={displayImage}
-            alt={imageAlt}
+            alt={`${imageAlt} main product view`}
             width={700}
             height={700}
             priority={activeIndex === 0}
@@ -169,7 +170,7 @@ export default function ProductGallery({ mainImage, galleryImages = [], title })
 
           <Image
             src={displayImage}
-            alt={imageAlt}
+            alt={`${imageAlt} enlarged product view`}
             width={1200}
             height={1200}
             sizes="95vw"

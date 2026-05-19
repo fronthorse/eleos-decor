@@ -10,6 +10,13 @@ import {
   getVariantPrice,
 } from "../../lib/productVariants";
 
+function formatProductDescription(description) {
+  return String(description || "")
+    .split(/\n{2,}|\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export default function ProductPurchaseExperience({ product, variants = [] }) {
   const defaultVariant = useMemo(() => getDefaultVariant(variants), [variants]);
   const [selectedVariant, setSelectedVariant] = useState(defaultVariant);
@@ -38,6 +45,10 @@ export default function ProductPurchaseExperience({ product, variants = [] }) {
     () => getVariantGalleryImages(product, activeVariant),
     [activeVariant, product]
   );
+  const descriptionParagraphs = useMemo(
+    () => formatProductDescription(product.description),
+    [product.description]
+  );
 
   return (
     <>
@@ -45,7 +56,7 @@ export default function ProductPurchaseExperience({ product, variants = [] }) {
         <ProductGallery
           mainImage={mainImage}
           galleryImages={galleryImages}
-          title={product.title}
+          title={product.imageAlt || product.title}
         />
       </div>
 
@@ -58,9 +69,20 @@ export default function ProductPurchaseExperience({ product, variants = [] }) {
 
         <p className="product-editorial-price">{"\u20a6"}{activeProduct.price}</p>
 
-        <p className="product-detail-description product-editorial-description">
-          {product.description}
-        </p>
+        <div className="product-detail-description product-editorial-description">
+          <h2>Product details</h2>
+
+          {descriptionParagraphs.length > 0 ? (
+            descriptionParagraphs.map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))
+          ) : (
+            <p>
+              A curated Eleos Decor piece selected for warm, elegant interior
+              styling.
+            </p>
+          )}
+        </div>
 
         <ProductVariantSelector
           variants={variants}
@@ -69,7 +91,7 @@ export default function ProductPurchaseExperience({ product, variants = [] }) {
         />
 
         <div className="product-style-note">
-          <span>Styling note</span>
+          <h2>Styling note</h2>
           <p>{product.stylingStory}</p>
         </div>
 
