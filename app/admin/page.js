@@ -33,7 +33,6 @@ const PRODUCT_IMAGE_COMPRESSION_OPTIONS = {
 const MAX_ORIGINAL_UPLOAD_SIZE_MB = 3;
 const SMALL_IMAGE_SKIP_COMPRESSION_MB = 0.75;
 const IMAGE_COMPRESSION_TIMEOUT_MS = 45000;
-const FILE_READ_TIMEOUT_MS = 30000;
 const STORAGE_UPLOAD_TIMEOUT_MS = 60000;
 const PRODUCTS_STORAGE_BUCKET = "products";
 const ADMIN_PRODUCT_LIST_FIELDS =
@@ -47,15 +46,6 @@ function handlePreviewImageError(event) {
   }
 
   event.currentTarget.src = PRODUCT_IMAGE_FALLBACK;
-}
-
-function createSafeFileName(fileName) {
-  const fallbackName = `product-image-${Date.now()}.jpg`;
-  const safeName = String(fileName || fallbackName)
-    .replaceAll(" ", "-")
-    .replace(/[^a-zA-Z0-9._-]/g, "-");
-
-  return `${Date.now()}-${safeName}`;
 }
 
 function getImageFilesFromInput(files) {
@@ -83,16 +73,6 @@ function createUploadError(message, cause, code = "") {
   error.cause = cause;
   error.code = code;
   return error;
-}
-
-function getUploadStatusLabel(status) {
-  if (status === 200) return "success";
-  if (status === 400) return "invalid file";
-  if (status === 401) return "unauthenticated";
-  if (status === 403) return "not admin";
-  if (status >= 500) return "storage/server error";
-
-  return "unexpected response";
 }
 
 function getImageContentType(file) {
@@ -568,7 +548,71 @@ export default function AdminPage() {
     );
   }
 
-  async function uploadImages(files, label = "Uploading images") {
+  async function createSignedUploadDetails({
+    accessToken,
+    filename,
+    contentType,
+    uploadType,
+    imageNumber,
+  }) {
+    let signedUrlResult;
+
+    try {
+      signedUrlResult = await withTimeout(
+        fetch("/api/admin/create-upload-url", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            filename,
+            contentType,
+            uploadType,
+          }),
+        }),
+        STORAGE_UPLOAD_TIMEOUT_MS,
+        `Image ${imageNumber} upload setup timed out. Please try again.`
+      );
+    } catch (error) {
+      throw createUploadError(
+        error.message || `Unable to prepare image ${imageNumber} upload.`,
+        error
+      );
+    }
+
+    const uploadDetails = await signedUrlResult.json().catch(() => ({}));
+
+    if (!signedUrlResult.ok) {
+      const isAuthFailure =
+        signedUrlResult.status === 401 || signedUrlResult.status === 403;
+
+      throw createUploadError(
+        signedUrlResult.status === 401
+          ? "Please log in again."
+          : uploadDetails.error || "Unable to prepare storage upload.",
+        null,
+        isAuthFailure ? "UPLOAD_AUTH_REQUIRED" : ""
+      );
+    }
+
+    if (
+      !uploadDetails.path ||
+      !uploadDetails.token ||
+      !uploadDetails.bucket ||
+      !uploadDetails.publicUrl
+    ) {
+      throw createUploadError("Upload setup completed without storage details.");
+    }
+
+    return uploadDetails;
+  }
+
+  async function uploadImages(
+    files,
+    label = "Uploading images",
+    uploadType = "product"
+  ) {
     const uploadedImageUrls = [];
     const selectedFiles = Array.from(files || []);
     const fileList = getImageFilesFromInput(selectedFiles);
@@ -672,44 +716,24 @@ export default function AdminPage() {
         });
       }
 
-      const safeFileName = createSafeFileName(uploadFile.name || file.name);
       const uploadContentType = getImageContentType(uploadFile);
+      const currentUploadType =
+        uploadType === "product" && index > 0 ? "gallery" : uploadType;
 
-      let uploadBody;
+      setUploadProgress({
+        active: true,
+        label: `${label}: preparing image ${current} of ${fileList.length}`,
+        current,
+        total: fileList.length,
+      });
 
-      try {
-        logUploadDebug("arrayBuffer read started", {
-          image: `${current} of ${fileList.length}`,
-          fileName: uploadFile.name || file.name || "(unnamed)",
-          fileType: uploadFile.type || "(empty)",
-          contentType: uploadContentType,
-          fileSize: uploadFile.size || file.size,
-        });
-
-        uploadBody = await withTimeout(
-          uploadFile.arrayBuffer(),
-          FILE_READ_TIMEOUT_MS,
-          `Image ${current} could not be read from the mobile file picker. Please choose it again.`
-        );
-
-        logUploadDebug("arrayBuffer read completed", {
-          image: `${current} of ${fileList.length}`,
-          byteLength: uploadBody.byteLength,
-        });
-      } catch (error) {
-        logUploadDebug("unable to read upload file as ArrayBuffer", {
-          label,
-          fileName: uploadFile.name || file.name,
-          fileType: uploadFile.type || file.type,
-          fileSize: uploadFile.size || file.size,
-          error,
-        });
-
-        throw createUploadError(
-          error.message || `Unable to read image ${current} before upload.`,
-          error
-        );
-      }
+      const uploadDetails = await createSignedUploadDetails({
+        accessToken,
+        filename: uploadFile.name || file.name || `image-${current}.jpg`,
+        contentType: uploadContentType,
+        uploadType: currentUploadType,
+        imageNumber: current,
+      });
 
       setUploadProgress({
         active: true,
@@ -718,60 +742,57 @@ export default function AdminPage() {
         total: fileList.length,
       });
 
-      let uploadResult;
-
       try {
-        logUploadDebug("admin upload api request started", {
+        logUploadDebug("signed storage upload started", {
+          bucket: uploadDetails.bucket,
+          path: uploadDetails.path,
+          uploadType: currentUploadType,
           contentType: uploadContentType,
-          bodyType: "FormData Blob from ArrayBuffer",
-          byteLength: uploadBody.byteLength,
+          fileSize: uploadFile.size || file.size,
         });
 
-        const uploadFormData = new FormData();
-        uploadFormData.append(
-          "file",
-          new Blob([uploadBody], { type: uploadContentType }),
-          safeFileName
-        );
-
-        uploadResult = await withTimeout(
-          fetch("/api/admin/upload", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
-            body: uploadFormData,
-          }),
+        const { error: uploadError } = await withTimeout(
+          supabase.storage
+            .from(uploadDetails.bucket)
+            .uploadToSignedUrl(
+              uploadDetails.path,
+              uploadDetails.token,
+              uploadFile,
+              {
+                contentType: uploadContentType,
+                upsert: false,
+              }
+            ),
           STORAGE_UPLOAD_TIMEOUT_MS,
           `Image ${current} upload timed out after ${Math.round(
             STORAGE_UPLOAD_TIMEOUT_MS / 1000
-          )} seconds. The server did not respond, so please try again.`
+          )} seconds. Please try again.`
         );
 
-        logUploadDebug("admin upload api response received", {
-          ok: uploadResult.ok,
-          status: uploadResult.status,
-          statusLabel: getUploadStatusLabel(uploadResult.status),
-        });
-        console.info("[admin upload api]", {
-          status: uploadResult.status,
-          statusLabel: getUploadStatusLabel(uploadResult.status),
-          ok: uploadResult.ok,
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        logUploadDebug("signed storage upload completed", {
+          bucket: uploadDetails.bucket,
+          path: uploadDetails.path,
+          publicUrl: uploadDetails.publicUrl,
         });
       } catch (error) {
         if (isTimeoutError(error)) {
-          logUploadDebug("admin upload api timed out", {
+          logUploadDebug("signed storage upload timed out", {
             contentType: uploadContentType,
-            byteLength: uploadBody.byteLength,
+            fileSize: uploadFile.size || file.size,
           });
 
           throw createUploadError(error.message, error);
         }
 
-        logUploadDebug("admin upload api request failed", {
+        logUploadDebug("signed storage upload failed", {
           label,
+          bucket: uploadDetails.bucket,
+          path: uploadDetails.path,
           contentType: uploadContentType,
-          byteLength: uploadBody.byteLength,
           error,
         });
 
@@ -781,35 +802,11 @@ export default function AdminPage() {
         );
       }
 
-      const uploadResponse = await uploadResult.json().catch(() => ({}));
-
-      if (!uploadResult.ok) {
-        logUploadDebug("admin upload api returned error", {
-          status: uploadResult.status,
-          message: uploadResponse.error || "",
-        });
-
-        const message = uploadResponse.error || "Storage upload failed.";
-        const isAuthFailure =
-          uploadResult.status === 401 || uploadResult.status === 403;
-        const code = isAuthFailure ? "UPLOAD_AUTH_REQUIRED" : "";
-
-        throw createUploadError(
-          uploadResult.status === 401 ? "Please log in again." : message,
-          null,
-          code
-        );
-      }
-
-      if (!uploadResponse.publicUrl) {
-        throw createUploadError("Upload completed without a public image URL.");
-      }
-
-      uploadedImageUrls.push(uploadResponse.publicUrl);
+      uploadedImageUrls.push(uploadDetails.publicUrl);
       logUploadDebug("upload completed", {
-        bucket: uploadResponse.bucket || PRODUCTS_STORAGE_BUCKET,
-        path: uploadResponse.path || "",
-        publicUrl: uploadResponse.publicUrl || "",
+        bucket: uploadDetails.bucket || PRODUCTS_STORAGE_BUCKET,
+        path: uploadDetails.path || "",
+        publicUrl: uploadDetails.publicUrl || "",
       });
     }
 
@@ -864,7 +861,7 @@ export default function AdminPage() {
       const uploadedImages = await uploadImages([
         ...variant.imageFiles,
         ...variant.galleryFiles,
-      ], variant.variant_label.trim());
+      ], variant.variant_label.trim(), "variant");
 
       variantRows.push({
         product_id: productId,
