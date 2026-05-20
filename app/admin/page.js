@@ -8,6 +8,8 @@ import { isAdminEmail } from "../../lib/adminAuth";
 import {
   delay,
   getUserSafely,
+  logAuthDebug,
+  refreshSessionSafely,
   withTimeout,
 } from "../../lib/supabase/auth";
 import {
@@ -83,9 +85,10 @@ function isTimeoutError(error) {
   return error?.name === "TimeoutError";
 }
 
-function createUploadError(message, cause) {
+function createUploadError(message, cause, code = "") {
   const error = new Error(message);
   error.cause = cause;
+  error.code = code;
   return error;
 }
 
@@ -369,6 +372,12 @@ export default function AdminPage() {
       setProductsLoadedPage(productPage);
     } catch (error) {
       toast.error(error.message);
+
+      if (error.code === "ADMIN_SESSION_EXPIRED") {
+        setUser(null);
+        router.replace("/admin/login");
+        router.refresh();
+      }
     } finally {
       setProductsLoading(false);
     }
@@ -549,12 +558,26 @@ export default function AdminPage() {
     let lastError = null;
 
     for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const { error: refreshError } = await refreshSessionSafely(supabase, {
+        timeoutMs: 15000,
+        timeoutMessage: "Session refresh timed out before upload.",
+      });
+
+      logAuthDebug("upload session refresh completed", {
+        attempt,
+        error: refreshError?.message || "",
+      });
+
+      if (refreshError) {
+        lastError = refreshError;
+      }
+
       const { user: verifiedUser, error } = await getUserSafely(supabase, {
-        timeoutMs: 12000,
+        timeoutMs: 15000,
         timeoutMessage: "Unable to verify your admin session before upload.",
       });
 
-      logUploadDebug("auth checked before upload", {
+      logAuthDebug("upload getUser completed", {
         attempt,
         hasUser: Boolean(verifiedUser),
         userEmail: verifiedUser?.email || "",
@@ -574,31 +597,14 @@ export default function AdminPage() {
         );
 
       if (attempt === 1) {
-        logUploadDebug("auth refresh before retry started");
-
-        try {
-          await withTimeout(
-            supabase.auth.refreshSession(),
-            10000,
-            "Admin session refresh timed out before upload."
-          );
-
-          logUploadDebug("auth refresh before retry completed");
-        } catch (refreshError) {
-          lastError = refreshError;
-          logUploadDebug("auth refresh before retry failed", {
-            error: refreshError.message || "",
-          });
-        }
-
         await delay(ADMIN_UPLOAD_AUTH_RETRY_DELAY_MS);
       }
     }
 
     throw createUploadError(
-      lastError?.message ||
-        "Your admin session is not ready. Please refresh the admin page and try again.",
-      lastError
+      "Session expired, please log in again.",
+      lastError,
+      "ADMIN_SESSION_EXPIRED"
     );
   }
 
@@ -675,7 +681,7 @@ export default function AdminPage() {
             fileSize: uploadFile.size || file.size,
           });
         } catch (error) {
-          console.warn("Image compression failed; using original file.", {
+          logUploadDebug("image compression failed; using original file", {
             label,
             fileName: file.name,
             fileSize: file.size,
@@ -731,7 +737,7 @@ export default function AdminPage() {
           byteLength: uploadBody.byteLength,
         });
       } catch (error) {
-        console.error("Unable to read upload file as ArrayBuffer.", {
+        logUploadDebug("unable to read upload file as ArrayBuffer", {
           label,
           fileName: uploadFile.name || file.name,
           fileType: uploadFile.type || file.type,
@@ -772,7 +778,7 @@ export default function AdminPage() {
           });
 
         uploadPromise.catch((error) => {
-          console.error("Supabase storage upload promise rejected.", {
+          logUploadDebug("supabase storage upload promise rejected", {
             bucket: PRODUCTS_STORAGE_BUCKET,
             path: safeFileName,
             label,
@@ -808,7 +814,7 @@ export default function AdminPage() {
           throw createUploadError(error.message, error);
         }
 
-        console.error("Supabase storage upload threw an error.", {
+        logUploadDebug("supabase storage upload threw an error", {
           bucket: PRODUCTS_STORAGE_BUCKET,
           path: safeFileName,
           label,
@@ -833,7 +839,7 @@ export default function AdminPage() {
           statusCode: uploadError.statusCode || uploadError.status || "",
         });
 
-        console.error("Supabase storage upload returned an error.", {
+        logUploadDebug("supabase storage upload returned an error", {
           bucket: PRODUCTS_STORAGE_BUCKET,
           path: safeFileName,
           label,

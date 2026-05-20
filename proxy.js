@@ -16,11 +16,20 @@ export async function proxy(request) {
           return request.cookies.getAll();
         },
 
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet, headersToSet) {
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           );
+          Object.entries(headersToSet || {}).forEach(([name, value]) =>
+            response.headers.set(name, value)
+          );
         },
+        encode: "tokens-only",
+      },
+      cookieOptions: {
+        path: "/",
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
       },
     }
   );
@@ -29,6 +38,8 @@ export async function proxy(request) {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
+
+  response.headers.set("Cache-Control", "private, no-store, max-age=0");
 
   const isAdminRoute =
     request.nextUrl.pathname.startsWith("/admin") &&

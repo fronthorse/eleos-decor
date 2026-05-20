@@ -4,7 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
 import { isAdminEmail } from "../../../lib/adminAuth";
-import { getUserSafely, withTimeout } from "../../../lib/supabase/auth";
+import {
+  delay,
+  getUserSafely,
+  logAuthDebug,
+  withTimeout,
+} from "../../../lib/supabase/auth";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -66,15 +71,45 @@ export default function AdminLoginPage() {
           email,
           password,
         }),
-        20000,
-        "Login timed out. Please check your connection and try again."
+        45000,
+        "Login is taking too long. Please try again."
       );
 
       if (error) {
         throw error;
       }
 
-      if (!isAdminEmail(data.user?.email)) {
+      let verifiedUser = null;
+      let verifyError = null;
+
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const result = await getUserSafely(supabase, {
+          timeoutMs: 15000,
+          timeoutMessage: "Unable to confirm your admin session after login.",
+        });
+
+        verifiedUser = result.user;
+        verifyError = result.error;
+
+        logAuthDebug("admin login getUser completed", {
+          attempt,
+          hasUser: Boolean(verifiedUser),
+          userEmail: verifiedUser?.email || "",
+          error: verifyError?.message || "",
+        });
+
+        if (verifiedUser) {
+          break;
+        }
+
+        await delay(700);
+      }
+
+      if (verifyError && !verifiedUser) {
+        throw verifyError;
+      }
+
+      if (!isAdminEmail(verifiedUser?.email || data.user?.email)) {
         await supabase.auth.signOut();
         setMessage("You are not authorized to access the admin portal.");
         setIsSubmitting(false);
@@ -85,6 +120,30 @@ export default function AdminLoginPage() {
       router.replace("/admin");
       router.refresh();
     } catch (error) {
+      if (error.name === "TimeoutError") {
+        for (let attempt = 1; attempt <= 2; attempt += 1) {
+          await delay(1000);
+
+          const { user } = await getUserSafely(supabase, {
+            timeoutMs: 10000,
+            timeoutMessage: "Unable to confirm your admin session after login.",
+          });
+
+          logAuthDebug("admin login timeout recovery getUser completed", {
+            attempt,
+            hasUser: Boolean(user),
+            userEmail: user?.email || "",
+          });
+
+          if (isAdminEmail(user?.email)) {
+            setMessage("Login successful. Redirecting...");
+            router.replace("/admin");
+            router.refresh();
+            return;
+          }
+        }
+      }
+
       setMessage(error.message || "Login failed. Please try again.");
       setIsSubmitting(false);
     }
