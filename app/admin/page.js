@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
@@ -35,6 +35,7 @@ const SMALL_IMAGE_SKIP_COMPRESSION_MB = 0.75;
 const IMAGE_COMPRESSION_TIMEOUT_MS = 45000;
 const STORAGE_UPLOAD_TIMEOUT_MS = 60000;
 const PRODUCTS_STORAGE_BUCKET = "products";
+const ADMIN_ACCESS_TOKEN_STORAGE_KEY = "admin_access_token";
 const ADMIN_PRODUCT_LIST_FIELDS =
   "id,title,category,price,description,image_url,gallery_images,created_at";
 
@@ -141,6 +142,7 @@ function getFileSummary(files = []) {
 export default function AdminPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const adminAccessTokenRef = useRef("");
 
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -188,6 +190,12 @@ export default function AdminPage() {
   const [existingVariants, setExistingVariants] = useState([]);
   const [editingProductId, setEditingProductId] = useState(null);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [adminAccessTokenAvailable, setAdminAccessTokenAvailable] =
+    useState(false);
+  const [uploadDebug, setUploadDebug] = useState({
+    createUploadUrlStatus: "idle",
+    signedUploadStatus: "idle",
+  });
   const [uploadProgress, setUploadProgress] = useState({
     active: false,
     label: "",
@@ -204,14 +212,23 @@ export default function AdminPage() {
     Math.ceil(inquiryCount / INQUIRY_PAGE_SIZE)
   );
 
-  const redirectToAdminLogin = useCallback(
-    (message = "Please log in again.") => {
-      toast.error(message);
-      router.replace("/admin/login");
-      router.refresh();
-    },
-    [router]
-  );
+  const storeAdminAccessToken = useCallback((accessToken = "") => {
+    adminAccessTokenRef.current = accessToken;
+    setAdminAccessTokenAvailable(Boolean(accessToken));
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (accessToken) {
+      window.sessionStorage.setItem(
+        ADMIN_ACCESS_TOKEN_STORAGE_KEY,
+        accessToken
+      );
+    } else {
+      window.sessionStorage.removeItem(ADMIN_ACCESS_TOKEN_STORAGE_KEY);
+    }
+  }, []);
 
   const checkAdminSession = useCallback(async () => {
     setCheckingAuth(true);
@@ -224,27 +241,31 @@ export default function AdminPage() {
 
       if (error || !session?.user) {
         setUser(null);
+        storeAdminAccessToken("");
         router.replace("/admin/login");
         return;
       }
 
       if (!isAdminEmail(session.user.email)) {
         setUser(null);
+        storeAdminAccessToken("");
         toast.error("You are not authorized to access the admin portal.");
         router.replace("/admin/login");
         router.refresh();
         return;
       }
 
+      storeAdminAccessToken(session.access_token || "");
       setUser(session.user);
     } catch (error) {
       setUser(null);
+      storeAdminAccessToken("");
       toast.error(error.message || "Unable to verify admin access.");
       router.replace("/admin/login");
     } finally {
       setCheckingAuth(false);
     }
-  }, [router, supabase]);
+  }, [router, storeAdminAccessToken, supabase]);
 
   useEffect(() => {
     checkAdminSession();
@@ -289,6 +310,7 @@ export default function AdminPage() {
   async function handleLogout() {
     setUser(null);
     setCheckingAuth(false);
+    storeAdminAccessToken("");
 
     try {
       await withTimeout(
@@ -532,19 +554,22 @@ export default function AdminPage() {
   }
 
   async function getUploadAccessToken() {
-    const { session } = await getSessionSafely(supabase, {
-      timeoutMs: 8000,
-      timeoutMessage: "Unable to read your upload session.",
-    });
+    const storedToken =
+      adminAccessTokenRef.current ||
+      (typeof window !== "undefined"
+        ? window.sessionStorage.getItem(ADMIN_ACCESS_TOKEN_STORAGE_KEY)
+        : "");
 
-    if (session?.access_token) {
-      return session.access_token;
+    if (storedToken) {
+      adminAccessTokenRef.current = storedToken;
+      setAdminAccessTokenAvailable(true);
+      return storedToken;
     }
 
     throw createUploadError(
-      "Please log in again.",
+      "Admin session unavailable. Please refresh or login again.",
       null,
-      "UPLOAD_AUTH_REQUIRED"
+      "UPLOAD_TOKEN_MISSING"
     );
   }
 
@@ -556,6 +581,11 @@ export default function AdminPage() {
     imageNumber,
   }) {
     let signedUrlResult;
+
+    setUploadDebug((current) => ({
+      ...current,
+      createUploadUrlStatus: "requesting",
+    }));
 
     try {
       signedUrlResult = await withTimeout(
@@ -575,24 +605,39 @@ export default function AdminPage() {
         `Image ${imageNumber} upload setup timed out. Please try again.`
       );
     } catch (error) {
+      setUploadDebug((current) => ({
+        ...current,
+        createUploadUrlStatus: `failed: ${error.message || "request error"}`,
+      }));
+
       throw createUploadError(
-        error.message || `Unable to prepare image ${imageNumber} upload.`,
+        `Signed URL request failed: ${
+          error.message || `Unable to prepare image ${imageNumber} upload.`
+        }`,
         error
       );
     }
 
     const uploadDetails = await signedUrlResult.json().catch(() => ({}));
+    const statusMessage = uploadDetails.error || signedUrlResult.statusText;
+
+    setUploadDebug((current) => ({
+      ...current,
+      createUploadUrlStatus: `${signedUrlResult.status}${
+        statusMessage ? ` ${statusMessage}` : ""
+      }`,
+    }));
 
     if (!signedUrlResult.ok) {
       const isAuthFailure =
         signedUrlResult.status === 401 || signedUrlResult.status === 403;
+      const message =
+        uploadDetails.error || "Unable to prepare storage upload.";
 
       throw createUploadError(
-        signedUrlResult.status === 401
-          ? "Please log in again."
-          : uploadDetails.error || "Unable to prepare storage upload.",
+        `Signed URL request failed (${signedUrlResult.status}): ${message}`,
         null,
-        isAuthFailure ? "UPLOAD_AUTH_REQUIRED" : ""
+        isAuthFailure ? "UPLOAD_AUTH_REJECTED" : ""
       );
     }
 
@@ -735,6 +780,11 @@ export default function AdminPage() {
         imageNumber: current,
       });
 
+      setUploadDebug((current) => ({
+        ...current,
+        signedUploadStatus: "uploading",
+      }));
+
       setUploadProgress({
         active: true,
         label: `${label}: uploading image ${current} of ${fileList.length}`,
@@ -773,6 +823,11 @@ export default function AdminPage() {
           throw uploadError;
         }
 
+        setUploadDebug((currentDebug) => ({
+          ...currentDebug,
+          signedUploadStatus: "success",
+        }));
+
         logUploadDebug("signed storage upload completed", {
           bucket: uploadDetails.bucket,
           path: uploadDetails.path,
@@ -780,6 +835,11 @@ export default function AdminPage() {
         });
       } catch (error) {
         if (isTimeoutError(error)) {
+          setUploadDebug((currentDebug) => ({
+            ...currentDebug,
+            signedUploadStatus: `failed: ${error.message}`,
+          }));
+
           logUploadDebug("signed storage upload timed out", {
             contentType: uploadContentType,
             fileSize: uploadFile.size || file.size,
@@ -787,6 +847,13 @@ export default function AdminPage() {
 
           throw createUploadError(error.message, error);
         }
+
+        setUploadDebug((currentDebug) => ({
+          ...currentDebug,
+          signedUploadStatus: `failed: ${
+            error.message || "storage upload error"
+          }`,
+        }));
 
         logUploadDebug("signed storage upload failed", {
           label,
@@ -797,7 +864,9 @@ export default function AdminPage() {
         });
 
         throw createUploadError(
-          error.message || `Unable to upload image ${current}.`,
+          `Supabase direct upload failed: ${
+            error.message || `Unable to upload image ${current}.`
+          }`,
           error
         );
       }
@@ -1031,6 +1100,10 @@ export default function AdminPage() {
     }
 
     setIsSavingProduct(true);
+    setUploadDebug({
+      createUploadUrlStatus: "idle",
+      signedUploadStatus: "idle",
+    });
 
     try {
       if (editingProductId) {
@@ -1103,8 +1176,18 @@ export default function AdminPage() {
       setAnalyticsLoaded(false);
       setActiveTab("products");
     } catch (error) {
-      if (error.code === "UPLOAD_AUTH_REQUIRED") {
-        redirectToAdminLogin(error.message || "Please log in again.");
+      if (error.code === "UPLOAD_AUTH_REJECTED") {
+        const shouldRelogin = window.confirm(
+          `${error.message}\n\nLog in again now?`
+        );
+
+        if (shouldRelogin) {
+          router.replace("/admin/login");
+          router.refresh();
+        } else {
+          toast.error(error.message);
+        }
+
         return;
       }
 
@@ -1676,6 +1759,13 @@ export default function AdminPage() {
             )}
 
             <div className="admin-form-actions">
+              <p className="text-muted small mb-2">
+                Upload debug: token exists:{" "}
+                {adminAccessTokenAvailable ? "yes" : "no"} | create-upload-url
+                status: {uploadDebug.createUploadUrlStatus} | signed upload
+                status: {uploadDebug.signedUploadStatus}
+              </p>
+
               {uploadProgress.active && (
                 <div
                   className="admin-upload-progress"
