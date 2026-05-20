@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
 import { isAdminEmail } from "../../lib/adminAuth";
 import {
-  delay,
+  getSessionSafely,
   getUserSafely,
   logAuthDebug,
   refreshSessionSafely,
@@ -41,7 +41,6 @@ const SMALL_IMAGE_SKIP_COMPRESSION_MB = 0.75;
 const IMAGE_COMPRESSION_TIMEOUT_MS = 45000;
 const FILE_READ_TIMEOUT_MS = 30000;
 const STORAGE_UPLOAD_TIMEOUT_MS = 60000;
-const ADMIN_UPLOAD_AUTH_RETRY_DELAY_MS = 900;
 const PRODUCTS_STORAGE_BUCKET = "products";
 const ADMIN_PRODUCT_LIST_FIELDS =
   "id,title,category,price,description,image_url,gallery_images,created_at";
@@ -554,56 +553,35 @@ export default function AdminPage() {
     }
   }
 
-  async function verifyAdminUserForUpload() {
-    let lastError = null;
+  async function getUploadAccessToken() {
+    const { session } = await getSessionSafely(supabase, {
+      timeoutMs: 8000,
+      timeoutMessage: "Unable to read your upload session.",
+    });
 
-    for (let attempt = 1; attempt <= 2; attempt += 1) {
-      const { error: refreshError } = await refreshSessionSafely(supabase, {
-        timeoutMs: 15000,
-        timeoutMessage: "Session refresh timed out before upload.",
+    if (session?.access_token) {
+      logAuthDebug("upload access token loaded from session");
+      return session.access_token;
+    }
+
+    const { session: refreshedSession, error: refreshError } =
+      await refreshSessionSafely(supabase, {
+        timeoutMs: 12000,
+        timeoutMessage: "Unable to refresh your upload session.",
       });
 
-      logAuthDebug("upload session refresh completed", {
-        attempt,
-        error: refreshError?.message || "",
-      });
+    logAuthDebug("upload access token refresh completed", {
+      hasSession: Boolean(refreshedSession),
+      error: refreshError?.message || "",
+    });
 
-      if (refreshError) {
-        lastError = refreshError;
-      }
-
-      const { user: verifiedUser, error } = await getUserSafely(supabase, {
-        timeoutMs: 15000,
-        timeoutMessage: "Unable to verify your admin session before upload.",
-      });
-
-      logAuthDebug("upload getUser completed", {
-        attempt,
-        hasUser: Boolean(verifiedUser),
-        userEmail: verifiedUser?.email || "",
-        error: error?.message || "",
-      });
-
-      if (verifiedUser && isAdminEmail(verifiedUser.email)) {
-        return verifiedUser;
-      }
-
-      lastError =
-        error ||
-        createUploadError(
-          verifiedUser
-            ? "You are not authorized to upload products."
-            : "No authenticated admin user was found."
-        );
-
-      if (attempt === 1) {
-        await delay(ADMIN_UPLOAD_AUTH_RETRY_DELAY_MS);
-      }
+    if (refreshedSession?.access_token) {
+      return refreshedSession.access_token;
     }
 
     throw createUploadError(
       "Session expired, please log in again.",
-      lastError,
+      refreshError,
       "ADMIN_SESSION_EXPIRED"
     );
   }
@@ -635,7 +613,7 @@ export default function AdminPage() {
       );
     }
 
-    await verifyAdminUserForUpload();
+    const accessToken = await getUploadAccessToken();
 
     for (const [index, file] of fileList.entries()) {
       const current = index + 1;
@@ -761,52 +739,40 @@ export default function AdminPage() {
       let uploadResult;
 
       try {
-        logUploadDebug("storage upload request started", {
-          bucket: PRODUCTS_STORAGE_BUCKET,
-          path: safeFileName,
+        logUploadDebug("admin upload api request started", {
           contentType: uploadContentType,
-          bodyType: "ArrayBuffer",
+          bodyType: "FormData Blob from ArrayBuffer",
           byteLength: uploadBody.byteLength,
         });
 
-        const uploadPromise = supabase.storage
-          .from(PRODUCTS_STORAGE_BUCKET)
-          .upload(safeFileName, uploadBody, {
-            cacheControl: "3600",
-            contentType: uploadContentType,
-            upsert: false,
-          });
-
-        uploadPromise.catch((error) => {
-          logUploadDebug("supabase storage upload promise rejected", {
-            bucket: PRODUCTS_STORAGE_BUCKET,
-            path: safeFileName,
-            label,
-            contentType: uploadContentType,
-            byteLength: uploadBody.byteLength,
-            error,
-          });
-        });
+        const uploadFormData = new FormData();
+        uploadFormData.append(
+          "file",
+          new Blob([uploadBody], { type: uploadContentType }),
+          safeFileName
+        );
 
         uploadResult = await withTimeout(
-          uploadPromise,
+          fetch("/api/admin/upload", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: uploadFormData,
+          }),
           STORAGE_UPLOAD_TIMEOUT_MS,
-          `Image ${current} storage upload timed out after ${Math.round(
+          `Image ${current} upload timed out after ${Math.round(
             STORAGE_UPLOAD_TIMEOUT_MS / 1000
           )} seconds. The server did not respond, so please try again.`
         );
 
-        logUploadDebug("storage upload promise resolved", {
-          bucket: PRODUCTS_STORAGE_BUCKET,
-          path: safeFileName,
-          hasData: Boolean(uploadResult?.data),
-          hasError: Boolean(uploadResult?.error),
+        logUploadDebug("admin upload api response received", {
+          ok: uploadResult.ok,
+          status: uploadResult.status,
         });
       } catch (error) {
         if (isTimeoutError(error)) {
-          logUploadDebug("storage upload timed out", {
-            bucket: PRODUCTS_STORAGE_BUCKET,
-            path: safeFileName,
+          logUploadDebug("admin upload api timed out", {
             contentType: uploadContentType,
             byteLength: uploadBody.byteLength,
           });
@@ -814,9 +780,7 @@ export default function AdminPage() {
           throw createUploadError(error.message, error);
         }
 
-        logUploadDebug("supabase storage upload threw an error", {
-          bucket: PRODUCTS_STORAGE_BUCKET,
-          path: safeFileName,
+        logUploadDebug("admin upload api request failed", {
           label,
           contentType: uploadContentType,
           byteLength: uploadBody.byteLength,
@@ -829,40 +793,36 @@ export default function AdminPage() {
         );
       }
 
-      const { error: uploadError } = uploadResult;
+      const uploadResponse = await uploadResult.json().catch(() => ({}));
 
-      if (uploadError) {
-        logUploadDebug("storage upload returned error", {
-          bucket: PRODUCTS_STORAGE_BUCKET,
-          path: safeFileName,
-          message: uploadError.message,
-          statusCode: uploadError.statusCode || uploadError.status || "",
+      if (!uploadResult.ok) {
+        logUploadDebug("admin upload api returned error", {
+          status: uploadResult.status,
+          message: uploadResponse.error || "",
         });
 
-        logUploadDebug("supabase storage upload returned an error", {
-          bucket: PRODUCTS_STORAGE_BUCKET,
-          path: safeFileName,
-          label,
-          contentType: uploadContentType,
-          byteLength: uploadBody.byteLength,
-          error: uploadError,
-        });
+        const message = uploadResponse.error || "Storage upload failed.";
+        const code =
+          uploadResult.status === 401 ? "ADMIN_SESSION_EXPIRED" : "";
 
         throw createUploadError(
-          `Supabase storage upload failed: ${uploadError.message}`,
-          uploadError
+          uploadResult.status === 401
+            ? "Session expired, please log in again."
+            : message,
+          null,
+          code
         );
       }
 
-      const { data: imageData } = supabase.storage
-        .from(PRODUCTS_STORAGE_BUCKET)
-        .getPublicUrl(safeFileName);
+      if (!uploadResponse.publicUrl) {
+        throw createUploadError("Upload completed without a public image URL.");
+      }
 
-      uploadedImageUrls.push(imageData.publicUrl);
+      uploadedImageUrls.push(uploadResponse.publicUrl);
       logUploadDebug("upload completed", {
-        bucket: PRODUCTS_STORAGE_BUCKET,
-        path: safeFileName,
-        publicUrl: imageData.publicUrl,
+        bucket: uploadResponse.bucket || PRODUCTS_STORAGE_BUCKET,
+        path: uploadResponse.path || "",
+        publicUrl: uploadResponse.publicUrl || "",
       });
     }
 
