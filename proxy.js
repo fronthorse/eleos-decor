@@ -1,57 +1,11 @@
-import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
-import { isAdminEmail } from "./lib/adminAuth";
 
 export async function proxy(request) {
-  let response = NextResponse.next({
+  const response = NextResponse.next({
     request,
   });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-
-        setAll(cookiesToSet, headersToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
-          Object.entries(headersToSet || {}).forEach(([name, value]) =>
-            response.headers.set(name, value)
-          );
-        },
-        encode: "tokens-only",
-      },
-      cookieOptions: {
-        path: "/",
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-      },
-    }
-  );
-
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
   response.headers.set("Cache-Control", "private, no-store, max-age=0");
-
-  const isAdminRoute =
-    request.nextUrl.pathname.startsWith("/admin") &&
-    request.nextUrl.pathname !== "/admin/login";
-
-  if (isAdminRoute && (!user || userError)) {
-    return NextResponse.redirect(new URL("/admin/login", request.url));
-  }
-
-  if (isAdminRoute && !isAdminEmail(user.email)) {
-    return NextResponse.redirect(new URL("/customer/login", request.url));
-  }
 
   return response;
 }

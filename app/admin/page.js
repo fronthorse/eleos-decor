@@ -1,17 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
 import { isAdminEmail } from "../../lib/adminAuth";
-import {
-  getSessionSafely,
-  getUserSafely,
-  logAuthDebug,
-  refreshSessionSafely,
-  withTimeout,
-} from "../../lib/supabase/auth";
+import { getSessionSafely, withTimeout } from "../../lib/supabase/auth";
 import {
   formatOrderStatus,
   getOrderStatusDescription,
@@ -157,7 +151,6 @@ function getFileSummary(files = []) {
 export default function AdminPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const authCheckIdRef = useRef(0);
 
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -221,62 +214,53 @@ export default function AdminPage() {
     Math.ceil(inquiryCount / INQUIRY_PAGE_SIZE)
   );
 
-  const checkUserSession = useCallback(async () => {
-    const authCheckId = authCheckIdRef.current + 1;
-    authCheckIdRef.current = authCheckId;
+  const handleAdminSessionExpired = useCallback(
+    (message = "Please log in again.") => {
+      setUser(null);
+      toast.error(message);
+      router.replace("/admin/login");
+      router.refresh();
+    },
+    [router]
+  );
+
+  const checkAdminSession = useCallback(async () => {
     setCheckingAuth(true);
 
     try {
-      const { user: verifiedUser, error } = await getUserSafely(supabase);
+      const { session, error } = await getSessionSafely(supabase, {
+        timeoutMs: 8000,
+        timeoutMessage: "Unable to check your session. Please log in again.",
+      });
 
-      if (authCheckId !== authCheckIdRef.current) {
-        return;
-      }
-
-      if (!verifiedUser) {
+      if (error || !session?.user) {
         setUser(null);
-        setCheckingAuth(false);
-
-        if (error) {
-          toast.error("Your session expired. Please log in again.");
-        }
-
         router.replace("/admin/login");
         return;
       }
 
-      if (!isAdminEmail(verifiedUser.email)) {
-        await withTimeout(
-          supabase.auth.signOut(),
-          8000,
-          "Unable to clear the current session."
-        ).catch(() => {});
-
+      if (!isAdminEmail(session.user.email)) {
+        await supabase.auth.signOut().catch(() => {});
         setUser(null);
-        setCheckingAuth(false);
         toast.error("You are not authorized to access the admin portal.");
-        router.replace("/customer/login");
+        router.replace("/admin/login");
         router.refresh();
         return;
       }
 
-      setUser(verifiedUser);
-      setCheckingAuth(false);
+      setUser(session.user);
     } catch (error) {
-      if (authCheckId !== authCheckIdRef.current) {
-        return;
-      }
-
       setUser(null);
-      setCheckingAuth(false);
       toast.error(error.message || "Unable to verify admin access.");
       router.replace("/admin/login");
+    } finally {
+      setCheckingAuth(false);
     }
   }, [router, supabase]);
 
   useEffect(() => {
-    checkUserSession();
-  }, [checkUserSession]);
+    checkAdminSession();
+  }, [checkAdminSession]);
 
   useEffect(() => {
     if (!user || activeTab !== "products") return;
@@ -315,9 +299,21 @@ export default function AdminPage() {
   }, [inquiryPage, inquiryTotalPages]);
 
   async function handleLogout() {
-    await supabase.auth.signOut();
-    router.push("/admin/login");
-    router.refresh();
+    setUser(null);
+    setCheckingAuth(false);
+
+    try {
+      await withTimeout(
+        supabase.auth.signOut(),
+        8000,
+        "Unable to sign out cleanly."
+      );
+    } catch (error) {
+      toast.error(error.message || "Unable to sign out cleanly.");
+    } finally {
+      router.replace("/admin/login");
+      router.refresh();
+    }
   }
 
   async function fetchProducts() {
@@ -560,28 +556,12 @@ export default function AdminPage() {
     });
 
     if (session?.access_token) {
-      logAuthDebug("upload access token loaded from session");
       return session.access_token;
     }
 
-    const { session: refreshedSession, error: refreshError } =
-      await refreshSessionSafely(supabase, {
-        timeoutMs: 12000,
-        timeoutMessage: "Unable to refresh your upload session.",
-      });
-
-    logAuthDebug("upload access token refresh completed", {
-      hasSession: Boolean(refreshedSession),
-      error: refreshError?.message || "",
-    });
-
-    if (refreshedSession?.access_token) {
-      return refreshedSession.access_token;
-    }
-
     throw createUploadError(
-      "Session expired, please log in again.",
-      refreshError,
+      "Please log in again.",
+      null,
       "ADMIN_SESSION_EXPIRED"
     );
   }
@@ -807,7 +787,7 @@ export default function AdminPage() {
 
         throw createUploadError(
           uploadResult.status === 401
-            ? "Session expired, please log in again."
+            ? "Please log in again."
             : message,
           null,
           code
@@ -1119,6 +1099,11 @@ export default function AdminPage() {
       setAnalyticsLoaded(false);
       setActiveTab("products");
     } catch (error) {
+      if (error.code === "ADMIN_SESSION_EXPIRED") {
+        handleAdminSessionExpired();
+        return;
+      }
+
       toast.error(error.message);
     } finally {
       setIsSavingProduct(false);

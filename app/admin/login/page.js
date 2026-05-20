@@ -4,12 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
 import { isAdminEmail } from "../../../lib/adminAuth";
-import {
-  delay,
-  getUserSafely,
-  logAuthDebug,
-  withTimeout,
-} from "../../../lib/supabase/auth";
+import { withTimeout } from "../../../lib/supabase/auth";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -17,8 +12,7 @@ export default function AdminLoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("Checking admin session...");
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -26,26 +20,21 @@ export default function AdminLoginPage() {
 
     async function checkExistingSession() {
       try {
-        const { user, error } = await getUserSafely(supabase);
+        const { data } = await withTimeout(
+          supabase.auth.getSession(),
+          8000,
+          "Unable to check your session."
+        );
 
         if (cancelled) {
           return;
         }
 
-        if (isAdminEmail(user?.email)) {
+        if (isAdminEmail(data.session?.user?.email)) {
           router.replace("/admin");
-          return;
         }
-
-        setMessage(error ? "Please log in to continue." : "");
       } catch {
-        if (!cancelled) {
-          setMessage("Please log in to continue.");
-        }
-      } finally {
-        if (!cancelled) {
-          setCheckingSession(false);
-        }
+        // Login remains available even if reading an existing session is slow.
       }
     }
 
@@ -79,38 +68,12 @@ export default function AdminLoginPage() {
         throw error;
       }
 
-      let verifiedUser = null;
-      let verifyError = null;
-
-      for (let attempt = 1; attempt <= 2; attempt += 1) {
-        const result = await getUserSafely(supabase, {
-          timeoutMs: 15000,
-          timeoutMessage: "Unable to confirm your admin session after login.",
-        });
-
-        verifiedUser = result.user;
-        verifyError = result.error;
-
-        logAuthDebug("admin login getUser completed", {
-          attempt,
-          hasUser: Boolean(verifiedUser),
-          userEmail: verifiedUser?.email || "",
-          error: verifyError?.message || "",
-        });
-
-        if (verifiedUser) {
-          break;
-        }
-
-        await delay(700);
-      }
-
-      if (verifyError && !verifiedUser) {
-        throw verifyError;
-      }
-
-      if (!isAdminEmail(verifiedUser?.email || data.user?.email)) {
-        await supabase.auth.signOut();
+      if (!isAdminEmail(data.user?.email)) {
+        await withTimeout(
+          supabase.auth.signOut(),
+          8000,
+          "Unable to clear the current session."
+        ).catch(() => {});
         setMessage("You are not authorized to access the admin portal.");
         setIsSubmitting(false);
         return;
@@ -120,30 +83,6 @@ export default function AdminLoginPage() {
       router.replace("/admin");
       router.refresh();
     } catch (error) {
-      if (error.name === "TimeoutError") {
-        for (let attempt = 1; attempt <= 2; attempt += 1) {
-          await delay(1000);
-
-          const { user } = await getUserSafely(supabase, {
-            timeoutMs: 10000,
-            timeoutMessage: "Unable to confirm your admin session after login.",
-          });
-
-          logAuthDebug("admin login timeout recovery getUser completed", {
-            attempt,
-            hasUser: Boolean(user),
-            userEmail: user?.email || "",
-          });
-
-          if (isAdminEmail(user?.email)) {
-            setMessage("Login successful. Redirecting...");
-            router.replace("/admin");
-            router.refresh();
-            return;
-          }
-        }
-      }
-
       setMessage(error.message || "Login failed. Please try again.");
       setIsSubmitting(false);
     }
@@ -162,7 +101,7 @@ export default function AdminLoginPage() {
             className="form-control"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            disabled={checkingSession || isSubmitting}
+            disabled={isSubmitting}
             required
           />
         </div>
@@ -175,15 +114,12 @@ export default function AdminLoginPage() {
             className="form-control"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            disabled={checkingSession || isSubmitting}
+            disabled={isSubmitting}
             required
           />
         </div>
 
-        <button
-          className="btn btn-dark w-100"
-          disabled={checkingSession || isSubmitting}
-        >
+        <button className="btn btn-dark w-100" disabled={isSubmitting}>
           {isSubmitting ? "Verifying..." : "Login"}
         </button>
 
