@@ -6,6 +6,19 @@ import { createClient } from "../../../lib/supabase/client";
 import { isAdminEmail } from "../../../lib/adminAuth";
 import { withTimeout } from "../../../lib/supabase/auth";
 
+function clearAdminTransientState() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.removeItem("adminUploadError");
+    window.sessionStorage.removeItem("adminAuthError");
+  } catch {
+    // Storage access can be restricted on some mobile browsers.
+  }
+}
+
 export default function AdminLoginPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -17,6 +30,7 @@ export default function AdminLoginPage() {
 
   useEffect(() => {
     let cancelled = false;
+    clearAdminTransientState();
 
     async function checkExistingSession() {
       try {
@@ -52,6 +66,7 @@ export default function AdminLoginPage() {
     }
 
     setIsSubmitting(true);
+    clearAdminTransientState();
     setMessage("Logging in...");
 
     try {
@@ -69,11 +84,6 @@ export default function AdminLoginPage() {
       }
 
       if (!isAdminEmail(data.user?.email)) {
-        await withTimeout(
-          supabase.auth.signOut(),
-          8000,
-          "Unable to clear the current session."
-        ).catch(() => {});
         setMessage("You are not authorized to access the admin portal.");
         setIsSubmitting(false);
         return;

@@ -43,7 +43,26 @@ function createSafeFileName(fileName) {
 }
 
 function jsonError(message, status) {
+  logUploadApiStatus(status, message);
   return NextResponse.json({ error: message }, { status });
+}
+
+function getUploadStatusLabel(status) {
+  if (status === 200) return "success";
+  if (status === 400) return "invalid file";
+  if (status === 401) return "unauthenticated";
+  if (status === 403) return "not admin";
+  if (status >= 500) return "storage/server error";
+
+  return "unexpected response";
+}
+
+function logUploadApiStatus(status, message = "") {
+  console.info("[admin upload api]", {
+    status,
+    statusLabel: getUploadStatusLabel(status),
+    message,
+  });
 }
 
 export async function POST(request) {
@@ -128,6 +147,8 @@ export async function POST(request) {
   const { data: imageData } = supabase.storage
     .from(PRODUCTS_STORAGE_BUCKET)
     .getPublicUrl(filePath);
+
+  logUploadApiStatus(200, "Upload completed.");
 
   return NextResponse.json({
     bucket: PRODUCTS_STORAGE_BUCKET,

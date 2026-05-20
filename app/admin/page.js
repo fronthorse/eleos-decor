@@ -85,6 +85,16 @@ function createUploadError(message, cause, code = "") {
   return error;
 }
 
+function getUploadStatusLabel(status) {
+  if (status === 200) return "success";
+  if (status === 400) return "invalid file";
+  if (status === 401) return "unauthenticated";
+  if (status === 403) return "not admin";
+  if (status >= 500) return "storage/server error";
+
+  return "unexpected response";
+}
+
 function getImageContentType(file) {
   const fileType = String(file?.type || "");
   const fileName = String(file?.name || "").toLowerCase();
@@ -214,9 +224,8 @@ export default function AdminPage() {
     Math.ceil(inquiryCount / INQUIRY_PAGE_SIZE)
   );
 
-  const handleAdminSessionExpired = useCallback(
+  const redirectToAdminLogin = useCallback(
     (message = "Please log in again.") => {
-      setUser(null);
       toast.error(message);
       router.replace("/admin/login");
       router.refresh();
@@ -240,7 +249,6 @@ export default function AdminPage() {
       }
 
       if (!isAdminEmail(session.user.email)) {
-        await supabase.auth.signOut().catch(() => {});
         setUser(null);
         toast.error("You are not authorized to access the admin portal.");
         router.replace("/admin/login");
@@ -367,12 +375,6 @@ export default function AdminPage() {
       setProductsLoadedPage(productPage);
     } catch (error) {
       toast.error(error.message);
-
-      if (error.code === "ADMIN_SESSION_EXPIRED") {
-        setUser(null);
-        router.replace("/admin/login");
-        router.refresh();
-      }
     } finally {
       setProductsLoading(false);
     }
@@ -562,7 +564,7 @@ export default function AdminPage() {
     throw createUploadError(
       "Please log in again.",
       null,
-      "ADMIN_SESSION_EXPIRED"
+      "UPLOAD_AUTH_REQUIRED"
     );
   }
 
@@ -749,6 +751,12 @@ export default function AdminPage() {
         logUploadDebug("admin upload api response received", {
           ok: uploadResult.ok,
           status: uploadResult.status,
+          statusLabel: getUploadStatusLabel(uploadResult.status),
+        });
+        console.info("[admin upload api]", {
+          status: uploadResult.status,
+          statusLabel: getUploadStatusLabel(uploadResult.status),
+          ok: uploadResult.ok,
         });
       } catch (error) {
         if (isTimeoutError(error)) {
@@ -782,13 +790,12 @@ export default function AdminPage() {
         });
 
         const message = uploadResponse.error || "Storage upload failed.";
-        const code =
-          uploadResult.status === 401 ? "ADMIN_SESSION_EXPIRED" : "";
+        const isAuthFailure =
+          uploadResult.status === 401 || uploadResult.status === 403;
+        const code = isAuthFailure ? "UPLOAD_AUTH_REQUIRED" : "";
 
         throw createUploadError(
-          uploadResult.status === 401
-            ? "Please log in again."
-            : message,
+          uploadResult.status === 401 ? "Please log in again." : message,
           null,
           code
         );
@@ -1099,8 +1106,8 @@ export default function AdminPage() {
       setAnalyticsLoaded(false);
       setActiveTab("products");
     } catch (error) {
-      if (error.code === "ADMIN_SESSION_EXPIRED") {
-        handleAdminSessionExpired();
+      if (error.code === "UPLOAD_AUTH_REQUIRED") {
+        redirectToAdminLogin(error.message || "Please log in again.");
         return;
       }
 
