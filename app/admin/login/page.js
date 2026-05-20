@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
 import { isAdminEmail } from "../../../lib/adminAuth";
-import { getSessionSafely, withTimeout } from "../../../lib/supabase/auth";
+import { getUserSafely, withTimeout } from "../../../lib/supabase/auth";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -21,13 +21,13 @@ export default function AdminLoginPage() {
 
     async function checkExistingSession() {
       try {
-        const { session, error } = await getSessionSafely(supabase);
+        const { user, error } = await getUserSafely(supabase);
 
         if (cancelled) {
           return;
         }
 
-        if (isAdminEmail(session?.user?.email)) {
+        if (isAdminEmail(user?.email)) {
           router.replace("/admin");
           return;
         }

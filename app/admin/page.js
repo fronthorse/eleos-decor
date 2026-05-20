@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
 import { isAdminEmail } from "../../lib/adminAuth";
-import { getSessionSafely, withTimeout } from "../../lib/supabase/auth";
+import {
+  delay,
+  getUserSafely,
+  withTimeout,
+} from "../../lib/supabase/auth";
 import {
   formatOrderStatus,
   getOrderStatusDescription,
@@ -35,6 +39,7 @@ const SMALL_IMAGE_SKIP_COMPRESSION_MB = 0.75;
 const IMAGE_COMPRESSION_TIMEOUT_MS = 45000;
 const FILE_READ_TIMEOUT_MS = 30000;
 const STORAGE_UPLOAD_TIMEOUT_MS = 60000;
+const ADMIN_UPLOAD_AUTH_RETRY_DELAY_MS = 900;
 const PRODUCTS_STORAGE_BUCKET = "products";
 const ADMIN_PRODUCT_LIST_FIELDS =
   "id,title,category,price,description,image_url,gallery_images,created_at";
@@ -102,13 +107,12 @@ function getImageContentType(file) {
   return "image/jpeg";
 }
 
-function getUploadDebugEntry(stage, details = {}) {
-  return {
-    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    time: new Date().toLocaleTimeString(),
-    stage,
-    details,
-  };
+function logUploadDebug(stage, details = {}) {
+  if (process.env.NODE_ENV !== "development") {
+    return;
+  }
+
+  console.info("[admin upload]", stage, details);
 }
 
 function getPositivePage(value) {
@@ -205,7 +209,6 @@ export default function AdminPage() {
     current: 0,
     total: 0,
   });
-  const [uploadDebug, setUploadDebug] = useState([]);
 
   const productTotalPages = Math.max(
     1,
@@ -216,26 +219,19 @@ export default function AdminPage() {
     Math.ceil(inquiryCount / INQUIRY_PAGE_SIZE)
   );
 
-  const addUploadDebug = useCallback((stage, details = {}) => {
-    const entry = getUploadDebugEntry(stage, details);
-
-    console.info("[admin upload]", stage, details);
-    setUploadDebug((currentEntries) => [...currentEntries.slice(-11), entry]);
-  }, []);
-
   const checkUserSession = useCallback(async () => {
     const authCheckId = authCheckIdRef.current + 1;
     authCheckIdRef.current = authCheckId;
     setCheckingAuth(true);
 
     try {
-      const { session, error } = await getSessionSafely(supabase);
+      const { user: verifiedUser, error } = await getUserSafely(supabase);
 
       if (authCheckId !== authCheckIdRef.current) {
         return;
       }
 
-      if (!session) {
+      if (!verifiedUser) {
         setUser(null);
         setCheckingAuth(false);
 
@@ -247,7 +243,7 @@ export default function AdminPage() {
         return;
       }
 
-      if (!isAdminEmail(session.user.email)) {
+      if (!isAdminEmail(verifiedUser.email)) {
         await withTimeout(
           supabase.auth.signOut(),
           8000,
@@ -262,7 +258,7 @@ export default function AdminPage() {
         return;
       }
 
-      setUser(session.user);
+      setUser(verifiedUser);
       setCheckingAuth(false);
     } catch (error) {
       if (authCheckId !== authCheckIdRef.current) {
@@ -549,12 +545,69 @@ export default function AdminPage() {
     }
   }
 
+  async function verifyAdminUserForUpload() {
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const { user: verifiedUser, error } = await getUserSafely(supabase, {
+        timeoutMs: 12000,
+        timeoutMessage: "Unable to verify your admin session before upload.",
+      });
+
+      logUploadDebug("auth checked before upload", {
+        attempt,
+        hasUser: Boolean(verifiedUser),
+        userEmail: verifiedUser?.email || "",
+        error: error?.message || "",
+      });
+
+      if (verifiedUser && isAdminEmail(verifiedUser.email)) {
+        return verifiedUser;
+      }
+
+      lastError =
+        error ||
+        createUploadError(
+          verifiedUser
+            ? "You are not authorized to upload products."
+            : "No authenticated admin user was found."
+        );
+
+      if (attempt === 1) {
+        logUploadDebug("auth refresh before retry started");
+
+        try {
+          await withTimeout(
+            supabase.auth.refreshSession(),
+            10000,
+            "Admin session refresh timed out before upload."
+          );
+
+          logUploadDebug("auth refresh before retry completed");
+        } catch (refreshError) {
+          lastError = refreshError;
+          logUploadDebug("auth refresh before retry failed", {
+            error: refreshError.message || "",
+          });
+        }
+
+        await delay(ADMIN_UPLOAD_AUTH_RETRY_DELAY_MS);
+      }
+    }
+
+    throw createUploadError(
+      lastError?.message ||
+        "Your admin session is not ready. Please refresh the admin page and try again.",
+      lastError
+    );
+  }
+
   async function uploadImages(files, label = "Uploading images") {
     const uploadedImageUrls = [];
     const selectedFiles = Array.from(files || []);
     const fileList = getImageFilesFromInput(selectedFiles);
 
-    addUploadDebug("upload batch received", {
+    logUploadDebug("upload batch received", {
       label,
       selectedFiles: selectedFiles.length,
       validImageFiles: fileList.length,
@@ -576,23 +629,7 @@ export default function AdminPage() {
       );
     }
 
-    const { session, error: sessionError } = await getSessionSafely(supabase, {
-      timeoutMs: 10000,
-      timeoutMessage: "Unable to verify your admin session before upload.",
-    });
-
-    addUploadDebug("auth checked before upload", {
-      hasSession: Boolean(session),
-      userEmail: session?.user?.email || "",
-      error: sessionError?.message || "",
-    });
-
-    if (!session || !isAdminEmail(session.user.email)) {
-      throw createUploadError(
-        sessionError?.message ||
-          "Your admin session is not valid. Please log in again before uploading."
-      );
-    }
+    await verifyAdminUserForUpload();
 
     for (const [index, file] of fileList.entries()) {
       const current = index + 1;
@@ -608,7 +645,7 @@ export default function AdminPage() {
       let uploadFile = file;
       const fileSizeInMb = getFileSizeInMb(file);
 
-      addUploadDebug("image selected", {
+      logUploadDebug("image selected", {
         label,
         image: `${current} of ${fileList.length}`,
         fileName: file.name || "(unnamed)",
@@ -620,7 +657,7 @@ export default function AdminPage() {
 
       if (fileSizeInMb > SMALL_IMAGE_SKIP_COMPRESSION_MB) {
         try {
-          addUploadDebug("compression started", {
+          logUploadDebug("compression started", {
             image: `${current} of ${fileList.length}`,
             fileName: file.name || "(unnamed)",
           });
@@ -631,7 +668,7 @@ export default function AdminPage() {
             `Image ${current} optimization timed out. Uploading the original image instead.`
           );
 
-          addUploadDebug("compression completed", {
+          logUploadDebug("compression completed", {
             image: `${current} of ${fileList.length}`,
             fileName: uploadFile.name || file.name || "(unnamed)",
             fileType: uploadFile.type || "(empty)",
@@ -656,14 +693,14 @@ export default function AdminPage() {
             );
           }
 
-          addUploadDebug("compression fallback to original", {
+          logUploadDebug("compression fallback to original", {
             image: `${current} of ${fileList.length}`,
             reason: error.message || "Compression failed",
             originalSize: file.size,
           });
         }
       } else {
-        addUploadDebug("compression skipped for small image", {
+        logUploadDebug("compression skipped for small image", {
           image: `${current} of ${fileList.length}`,
           fileSize: file.size,
         });
@@ -675,7 +712,7 @@ export default function AdminPage() {
       let uploadBody;
 
       try {
-        addUploadDebug("arrayBuffer read started", {
+        logUploadDebug("arrayBuffer read started", {
           image: `${current} of ${fileList.length}`,
           fileName: uploadFile.name || file.name || "(unnamed)",
           fileType: uploadFile.type || "(empty)",
@@ -689,7 +726,7 @@ export default function AdminPage() {
           `Image ${current} could not be read from the mobile file picker. Please choose it again.`
         );
 
-        addUploadDebug("arrayBuffer read completed", {
+        logUploadDebug("arrayBuffer read completed", {
           image: `${current} of ${fileList.length}`,
           byteLength: uploadBody.byteLength,
         });
@@ -718,7 +755,7 @@ export default function AdminPage() {
       let uploadResult;
 
       try {
-        addUploadDebug("storage upload request started", {
+        logUploadDebug("storage upload request started", {
           bucket: PRODUCTS_STORAGE_BUCKET,
           path: safeFileName,
           contentType: uploadContentType,
@@ -753,7 +790,7 @@ export default function AdminPage() {
           )} seconds. The server did not respond, so please try again.`
         );
 
-        addUploadDebug("storage upload promise resolved", {
+        logUploadDebug("storage upload promise resolved", {
           bucket: PRODUCTS_STORAGE_BUCKET,
           path: safeFileName,
           hasData: Boolean(uploadResult?.data),
@@ -761,7 +798,7 @@ export default function AdminPage() {
         });
       } catch (error) {
         if (isTimeoutError(error)) {
-          addUploadDebug("storage upload timed out", {
+          logUploadDebug("storage upload timed out", {
             bucket: PRODUCTS_STORAGE_BUCKET,
             path: safeFileName,
             contentType: uploadContentType,
@@ -789,7 +826,7 @@ export default function AdminPage() {
       const { error: uploadError } = uploadResult;
 
       if (uploadError) {
-        addUploadDebug("storage upload returned error", {
+        logUploadDebug("storage upload returned error", {
           bucket: PRODUCTS_STORAGE_BUCKET,
           path: safeFileName,
           message: uploadError.message,
@@ -816,7 +853,7 @@ export default function AdminPage() {
         .getPublicUrl(safeFileName);
 
       uploadedImageUrls.push(imageData.publicUrl);
-      addUploadDebug("upload completed", {
+      logUploadDebug("upload completed", {
         bucket: PRODUCTS_STORAGE_BUCKET,
         path: safeFileName,
         publicUrl: imageData.publicUrl,
@@ -958,7 +995,6 @@ export default function AdminPage() {
       current: 0,
       total: 0,
     });
-    setUploadDebug([]);
   }
 
   async function fetchProductVariants(productId) {
@@ -1045,7 +1081,6 @@ export default function AdminPage() {
     }
 
     setIsSavingProduct(true);
-    setUploadDebug([]);
 
     try {
       if (editingProductId) {
@@ -1705,29 +1740,6 @@ export default function AdminPage() {
                       />
                     </div>
                   )}
-                </div>
-              )}
-
-              {uploadDebug.length > 0 && (
-                <div className="admin-upload-progress">
-                  <strong className="d-block mb-2">Upload debug</strong>
-                  <div className="small text-muted">
-                    {uploadDebug.map((entry) => (
-                      <div key={entry.id}>
-                        {entry.time} - {entry.stage}
-                        {entry.details?.path ? ` - ${entry.details.path}` : ""}
-                        {entry.details?.contentType
-                          ? ` - ${entry.details.contentType}`
-                          : ""}
-                        {entry.details?.byteLength
-                          ? ` - ${entry.details.byteLength} bytes`
-                          : ""}
-                        {entry.details?.message
-                          ? ` - ${entry.details.message}`
-                          : ""}
-                      </div>
-                    ))}
-                  </div>
                 </div>
               )}
 

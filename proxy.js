@@ -26,23 +26,21 @@ export async function proxy(request) {
   );
 
   const {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession();
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
   const isAdminRoute =
-  request.nextUrl.pathname.startsWith("/admin") &&
-  request.nextUrl.pathname !== "/admin/login";
+    request.nextUrl.pathname.startsWith("/admin") &&
+    request.nextUrl.pathname !== "/admin/login";
 
-if (isAdminRoute && (!session || sessionError)) {
-  return NextResponse.redirect(
-    new URL("/admin/login", request.url)
-  );
-}
+  if (isAdminRoute && (!user || userError)) {
+    return NextResponse.redirect(new URL("/admin/login", request.url));
+  }
 
-if (isAdminRoute && !isAdminEmail(session.user.email)) {
-  return NextResponse.redirect(new URL("/customer/login", request.url));
-}
+  if (isAdminRoute && !isAdminEmail(user.email)) {
+    return NextResponse.redirect(new URL("/customer/login", request.url));
+  }
 
   return response;
 }
