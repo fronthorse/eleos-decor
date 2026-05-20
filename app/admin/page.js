@@ -30,8 +30,11 @@ const PRODUCT_IMAGE_COMPRESSION_OPTIONS = {
   useWebWorker: true,
   initialQuality: 0.78,
 };
-const IMAGE_COMPRESSION_TIMEOUT_MS = 30000;
+const MAX_ORIGINAL_UPLOAD_SIZE_MB = 3;
+const SMALL_IMAGE_SKIP_COMPRESSION_MB = 0.75;
+const IMAGE_COMPRESSION_TIMEOUT_MS = 45000;
 const STORAGE_UPLOAD_TIMEOUT_MS = 60000;
+const PRODUCTS_STORAGE_BUCKET = "products";
 const ADMIN_PRODUCT_LIST_FIELDS =
   "id,title,category,price,description,image_url,gallery_images,created_at";
 
@@ -64,6 +67,20 @@ function getImageFilesFromInput(files) {
       /\.(avif|gif|heic|heif|jpe?g|png|webp)$/i.test(name)
     );
   });
+}
+
+function getFileSizeInMb(file) {
+  return Number(file?.size || 0) / (1024 * 1024);
+}
+
+function isTimeoutError(error) {
+  return error?.name === "TimeoutError";
+}
+
+function createUploadError(message, cause) {
+  const error = new Error(message);
+  error.cause = cause;
+  return error;
 }
 
 function getPositivePage(value) {
@@ -498,10 +515,23 @@ export default function AdminPage() {
 
   async function uploadImages(files, label = "Uploading images") {
     const uploadedImageUrls = [];
-    const fileList = getImageFilesFromInput(files);
+    const selectedFiles = Array.from(files || []);
+    const fileList = getImageFilesFromInput(selectedFiles);
+
+    if (selectedFiles.length === 0) {
+      return uploadedImageUrls;
+    }
 
     if (fileList.length === 0) {
-      return uploadedImageUrls;
+      throw createUploadError(
+        "No valid image file was selected. Please choose a JPG, PNG, WebP, GIF, AVIF, or HEIC image."
+      );
+    }
+
+    if (fileList.length !== selectedFiles.length) {
+      throw createUploadError(
+        "One or more selected files are not valid images. Please choose JPG, PNG, WebP, GIF, AVIF, or HEIC files."
+      );
     }
 
     for (const [index, file] of fileList.entries()) {
@@ -514,21 +544,38 @@ export default function AdminPage() {
         total: fileList.length,
       });
 
-      let compressedFile;
+      let uploadFile = file;
+      const fileSizeInMb = getFileSizeInMb(file);
 
-      try {
-        compressedFile = await withTimeout(
-          imageCompression(file, PRODUCT_IMAGE_COMPRESSION_OPTIONS),
-          IMAGE_COMPRESSION_TIMEOUT_MS,
-          `Image ${current} took too long to optimize. Please try a smaller image.`
-        );
-      } catch (error) {
-        throw new Error(
-          error.message || `Unable to optimize image ${current}.`
-        );
+      if (fileSizeInMb > SMALL_IMAGE_SKIP_COMPRESSION_MB) {
+        try {
+          uploadFile = await withTimeout(
+            imageCompression(file, PRODUCT_IMAGE_COMPRESSION_OPTIONS),
+            IMAGE_COMPRESSION_TIMEOUT_MS,
+            `Image ${current} optimization timed out. Uploading the original image instead.`
+          );
+        } catch (error) {
+          console.warn("Image compression failed; using original file.", {
+            label,
+            fileName: file.name,
+            fileSize: file.size,
+            error,
+          });
+
+          if (fileSizeInMb > MAX_ORIGINAL_UPLOAD_SIZE_MB) {
+            const reason = isTimeoutError(error)
+              ? "Image optimization timed out"
+              : "Image optimization failed";
+
+            throw createUploadError(
+              `${reason}, and the original image is too large to upload without compression. Please try a smaller image.`,
+              error
+            );
+          }
+        }
       }
 
-      const safeFileName = createSafeFileName(compressedFile.name || file.name);
+      const safeFileName = createSafeFileName(uploadFile.name || file.name);
 
       setUploadProgress({
         active: true,
@@ -540,23 +587,68 @@ export default function AdminPage() {
       let uploadResult;
 
       try {
+        const uploadPromise = supabase.storage
+          .from(PRODUCTS_STORAGE_BUCKET)
+          .upload(safeFileName, uploadFile);
+
+        uploadPromise.catch((error) => {
+          console.error("Supabase storage upload promise rejected.", {
+            bucket: PRODUCTS_STORAGE_BUCKET,
+            path: safeFileName,
+            label,
+            fileName: uploadFile.name || file.name,
+            fileSize: uploadFile.size || file.size,
+            error,
+          });
+        });
+
         uploadResult = await withTimeout(
-          supabase.storage.from("products").upload(safeFileName, compressedFile),
+          uploadPromise,
           STORAGE_UPLOAD_TIMEOUT_MS,
-          `Image ${current} upload timed out. Please check your connection and try again.`
+          `Image ${current} storage upload timed out after ${Math.round(
+            STORAGE_UPLOAD_TIMEOUT_MS / 1000
+          )} seconds. The server did not respond, so please try again.`
         );
       } catch (error) {
-        throw new Error(error.message || `Unable to upload image ${current}.`);
+        if (isTimeoutError(error)) {
+          throw createUploadError(error.message, error);
+        }
+
+        console.error("Supabase storage upload threw an error.", {
+          bucket: PRODUCTS_STORAGE_BUCKET,
+          path: safeFileName,
+          label,
+          fileName: uploadFile.name || file.name,
+          fileSize: uploadFile.size || file.size,
+          error,
+        });
+
+        throw createUploadError(
+          error.message || `Unable to upload image ${current}.`,
+          error
+        );
       }
 
       const { error: uploadError } = uploadResult;
 
       if (uploadError) {
-        throw new Error(uploadError.message);
+        console.error("Supabase storage upload returned an error.", {
+          bucket: PRODUCTS_STORAGE_BUCKET,
+          path: safeFileName,
+          label,
+          fileName: uploadFile.name || file.name,
+          fileSize: uploadFile.size || file.size,
+          error: uploadError,
+        });
+
+        throw createUploadError(
+          `Supabase storage upload failed: ${uploadError.message}`,
+          uploadError
+        );
       }
 
       const { data: imageData } = supabase.storage
-        .from("products")
+        .from(PRODUCTS_STORAGE_BUCKET)
         .getPublicUrl(safeFileName);
 
       uploadedImageUrls.push(imageData.publicUrl);
