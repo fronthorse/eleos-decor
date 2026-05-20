@@ -33,6 +33,7 @@ const PRODUCT_IMAGE_COMPRESSION_OPTIONS = {
 const MAX_ORIGINAL_UPLOAD_SIZE_MB = 3;
 const SMALL_IMAGE_SKIP_COMPRESSION_MB = 0.75;
 const IMAGE_COMPRESSION_TIMEOUT_MS = 45000;
+const FILE_READ_TIMEOUT_MS = 30000;
 const STORAGE_UPLOAD_TIMEOUT_MS = 60000;
 const PRODUCTS_STORAGE_BUCKET = "products";
 const ADMIN_PRODUCT_LIST_FIELDS =
@@ -81,6 +82,33 @@ function createUploadError(message, cause) {
   const error = new Error(message);
   error.cause = cause;
   return error;
+}
+
+function getImageContentType(file) {
+  const fileType = String(file?.type || "");
+  const fileName = String(file?.name || "").toLowerCase();
+
+  if (fileType.startsWith("image/")) {
+    return fileType;
+  }
+
+  if (fileName.endsWith(".png")) return "image/png";
+  if (fileName.endsWith(".webp")) return "image/webp";
+  if (fileName.endsWith(".gif")) return "image/gif";
+  if (fileName.endsWith(".avif")) return "image/avif";
+  if (fileName.endsWith(".heic")) return "image/heic";
+  if (fileName.endsWith(".heif")) return "image/heif";
+
+  return "image/jpeg";
+}
+
+function getUploadDebugEntry(stage, details = {}) {
+  return {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    time: new Date().toLocaleTimeString(),
+    stage,
+    details,
+  };
 }
 
 function getPositivePage(value) {
@@ -177,6 +205,7 @@ export default function AdminPage() {
     current: 0,
     total: 0,
   });
+  const [uploadDebug, setUploadDebug] = useState([]);
 
   const productTotalPages = Math.max(
     1,
@@ -186,6 +215,13 @@ export default function AdminPage() {
     1,
     Math.ceil(inquiryCount / INQUIRY_PAGE_SIZE)
   );
+
+  const addUploadDebug = useCallback((stage, details = {}) => {
+    const entry = getUploadDebugEntry(stage, details);
+
+    console.info("[admin upload]", stage, details);
+    setUploadDebug((currentEntries) => [...currentEntries.slice(-11), entry]);
+  }, []);
 
   const checkUserSession = useCallback(async () => {
     const authCheckId = authCheckIdRef.current + 1;
@@ -518,6 +554,12 @@ export default function AdminPage() {
     const selectedFiles = Array.from(files || []);
     const fileList = getImageFilesFromInput(selectedFiles);
 
+    addUploadDebug("upload batch received", {
+      label,
+      selectedFiles: selectedFiles.length,
+      validImageFiles: fileList.length,
+    });
+
     if (selectedFiles.length === 0) {
       return uploadedImageUrls;
     }
@@ -534,8 +576,27 @@ export default function AdminPage() {
       );
     }
 
+    const { session, error: sessionError } = await getSessionSafely(supabase, {
+      timeoutMs: 10000,
+      timeoutMessage: "Unable to verify your admin session before upload.",
+    });
+
+    addUploadDebug("auth checked before upload", {
+      hasSession: Boolean(session),
+      userEmail: session?.user?.email || "",
+      error: sessionError?.message || "",
+    });
+
+    if (!session || !isAdminEmail(session.user.email)) {
+      throw createUploadError(
+        sessionError?.message ||
+          "Your admin session is not valid. Please log in again before uploading."
+      );
+    }
+
     for (const [index, file] of fileList.entries()) {
       const current = index + 1;
+      const originalContentType = getImageContentType(file);
 
       setUploadProgress({
         active: true,
@@ -547,13 +608,35 @@ export default function AdminPage() {
       let uploadFile = file;
       const fileSizeInMb = getFileSizeInMb(file);
 
+      addUploadDebug("image selected", {
+        label,
+        image: `${current} of ${fileList.length}`,
+        fileName: file.name || "(unnamed)",
+        fileType: file.type || "(empty)",
+        inferredContentType: originalContentType,
+        fileSize: file.size,
+        fileSizeMb: fileSizeInMb.toFixed(3),
+      });
+
       if (fileSizeInMb > SMALL_IMAGE_SKIP_COMPRESSION_MB) {
         try {
+          addUploadDebug("compression started", {
+            image: `${current} of ${fileList.length}`,
+            fileName: file.name || "(unnamed)",
+          });
+
           uploadFile = await withTimeout(
             imageCompression(file, PRODUCT_IMAGE_COMPRESSION_OPTIONS),
             IMAGE_COMPRESSION_TIMEOUT_MS,
             `Image ${current} optimization timed out. Uploading the original image instead.`
           );
+
+          addUploadDebug("compression completed", {
+            image: `${current} of ${fileList.length}`,
+            fileName: uploadFile.name || file.name || "(unnamed)",
+            fileType: uploadFile.type || "(empty)",
+            fileSize: uploadFile.size || file.size,
+          });
         } catch (error) {
           console.warn("Image compression failed; using original file.", {
             label,
@@ -572,10 +655,58 @@ export default function AdminPage() {
               error
             );
           }
+
+          addUploadDebug("compression fallback to original", {
+            image: `${current} of ${fileList.length}`,
+            reason: error.message || "Compression failed",
+            originalSize: file.size,
+          });
         }
+      } else {
+        addUploadDebug("compression skipped for small image", {
+          image: `${current} of ${fileList.length}`,
+          fileSize: file.size,
+        });
       }
 
       const safeFileName = createSafeFileName(uploadFile.name || file.name);
+      const uploadContentType = getImageContentType(uploadFile);
+
+      let uploadBody;
+
+      try {
+        addUploadDebug("arrayBuffer read started", {
+          image: `${current} of ${fileList.length}`,
+          fileName: uploadFile.name || file.name || "(unnamed)",
+          fileType: uploadFile.type || "(empty)",
+          contentType: uploadContentType,
+          fileSize: uploadFile.size || file.size,
+        });
+
+        uploadBody = await withTimeout(
+          uploadFile.arrayBuffer(),
+          FILE_READ_TIMEOUT_MS,
+          `Image ${current} could not be read from the mobile file picker. Please choose it again.`
+        );
+
+        addUploadDebug("arrayBuffer read completed", {
+          image: `${current} of ${fileList.length}`,
+          byteLength: uploadBody.byteLength,
+        });
+      } catch (error) {
+        console.error("Unable to read upload file as ArrayBuffer.", {
+          label,
+          fileName: uploadFile.name || file.name,
+          fileType: uploadFile.type || file.type,
+          fileSize: uploadFile.size || file.size,
+          error,
+        });
+
+        throw createUploadError(
+          error.message || `Unable to read image ${current} before upload.`,
+          error
+        );
+      }
 
       setUploadProgress({
         active: true,
@@ -587,17 +718,29 @@ export default function AdminPage() {
       let uploadResult;
 
       try {
+        addUploadDebug("storage upload request started", {
+          bucket: PRODUCTS_STORAGE_BUCKET,
+          path: safeFileName,
+          contentType: uploadContentType,
+          bodyType: "ArrayBuffer",
+          byteLength: uploadBody.byteLength,
+        });
+
         const uploadPromise = supabase.storage
           .from(PRODUCTS_STORAGE_BUCKET)
-          .upload(safeFileName, uploadFile);
+          .upload(safeFileName, uploadBody, {
+            cacheControl: "3600",
+            contentType: uploadContentType,
+            upsert: false,
+          });
 
         uploadPromise.catch((error) => {
           console.error("Supabase storage upload promise rejected.", {
             bucket: PRODUCTS_STORAGE_BUCKET,
             path: safeFileName,
             label,
-            fileName: uploadFile.name || file.name,
-            fileSize: uploadFile.size || file.size,
+            contentType: uploadContentType,
+            byteLength: uploadBody.byteLength,
             error,
           });
         });
@@ -609,8 +752,22 @@ export default function AdminPage() {
             STORAGE_UPLOAD_TIMEOUT_MS / 1000
           )} seconds. The server did not respond, so please try again.`
         );
+
+        addUploadDebug("storage upload promise resolved", {
+          bucket: PRODUCTS_STORAGE_BUCKET,
+          path: safeFileName,
+          hasData: Boolean(uploadResult?.data),
+          hasError: Boolean(uploadResult?.error),
+        });
       } catch (error) {
         if (isTimeoutError(error)) {
+          addUploadDebug("storage upload timed out", {
+            bucket: PRODUCTS_STORAGE_BUCKET,
+            path: safeFileName,
+            contentType: uploadContentType,
+            byteLength: uploadBody.byteLength,
+          });
+
           throw createUploadError(error.message, error);
         }
 
@@ -618,8 +775,8 @@ export default function AdminPage() {
           bucket: PRODUCTS_STORAGE_BUCKET,
           path: safeFileName,
           label,
-          fileName: uploadFile.name || file.name,
-          fileSize: uploadFile.size || file.size,
+          contentType: uploadContentType,
+          byteLength: uploadBody.byteLength,
           error,
         });
 
@@ -632,12 +789,19 @@ export default function AdminPage() {
       const { error: uploadError } = uploadResult;
 
       if (uploadError) {
+        addUploadDebug("storage upload returned error", {
+          bucket: PRODUCTS_STORAGE_BUCKET,
+          path: safeFileName,
+          message: uploadError.message,
+          statusCode: uploadError.statusCode || uploadError.status || "",
+        });
+
         console.error("Supabase storage upload returned an error.", {
           bucket: PRODUCTS_STORAGE_BUCKET,
           path: safeFileName,
           label,
-          fileName: uploadFile.name || file.name,
-          fileSize: uploadFile.size || file.size,
+          contentType: uploadContentType,
+          byteLength: uploadBody.byteLength,
           error: uploadError,
         });
 
@@ -652,6 +816,11 @@ export default function AdminPage() {
         .getPublicUrl(safeFileName);
 
       uploadedImageUrls.push(imageData.publicUrl);
+      addUploadDebug("upload completed", {
+        bucket: PRODUCTS_STORAGE_BUCKET,
+        path: safeFileName,
+        publicUrl: imageData.publicUrl,
+      });
     }
 
     return uploadedImageUrls;
@@ -789,6 +958,7 @@ export default function AdminPage() {
       current: 0,
       total: 0,
     });
+    setUploadDebug([]);
   }
 
   async function fetchProductVariants(productId) {
@@ -842,7 +1012,7 @@ export default function AdminPage() {
 
     if (filePaths.length > 0) {
       const { error: storageError } = await supabase.storage
-        .from("products")
+        .from(PRODUCTS_STORAGE_BUCKET)
         .remove(filePaths);
 
       if (storageError) {
@@ -875,6 +1045,7 @@ export default function AdminPage() {
     }
 
     setIsSavingProduct(true);
+    setUploadDebug([]);
 
     try {
       if (editingProductId) {
@@ -1534,6 +1705,29 @@ export default function AdminPage() {
                       />
                     </div>
                   )}
+                </div>
+              )}
+
+              {uploadDebug.length > 0 && (
+                <div className="admin-upload-progress">
+                  <strong className="d-block mb-2">Upload debug</strong>
+                  <div className="small text-muted">
+                    {uploadDebug.map((entry) => (
+                      <div key={entry.id}>
+                        {entry.time} - {entry.stage}
+                        {entry.details?.path ? ` - ${entry.details.path}` : ""}
+                        {entry.details?.contentType
+                          ? ` - ${entry.details.contentType}`
+                          : ""}
+                        {entry.details?.byteLength
+                          ? ` - ${entry.details.byteLength} bytes`
+                          : ""}
+                        {entry.details?.message
+                          ? ` - ${entry.details.message}`
+                          : ""}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
