@@ -34,6 +34,7 @@ const PRODUCT_IMAGE_COMPRESSION_OPTIONS = {
 const MAX_ORIGINAL_UPLOAD_SIZE_MB = 3;
 const SMALL_IMAGE_SKIP_COMPRESSION_MB = 0.75;
 const IMAGE_COMPRESSION_TIMEOUT_MS = 45000;
+const ADMIN_DB_TIMEOUT_MS = 20000;
 const PRODUCTS_STORAGE_BUCKET = "products";
 const SUPABASE_STORAGE_HOST = "https://qexvohhfowswnryqugvr.storage.supabase.co";
 const SUPABASE_TUS_ENDPOINT = `${SUPABASE_STORAGE_HOST}/storage/v1/upload/resumable`;
@@ -198,6 +199,7 @@ export default function AdminPage() {
 
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [authError, setAuthError] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
 
   const [products, setProducts] = useState([]);
@@ -285,6 +287,7 @@ export default function AdminPage() {
 
   const checkAdminSession = useCallback(async () => {
     setCheckingAuth(true);
+    setAuthError("");
 
     try {
       const { session, error } = await getSessionSafely(supabase, {
@@ -295,6 +298,9 @@ export default function AdminPage() {
       if (error || !session?.user) {
         setUser(null);
         storeAdminAccessToken("");
+        setAuthError(
+          error?.message || "Please log in to access the admin portal."
+        );
         router.replace("/admin/login");
         return;
       }
@@ -302,6 +308,7 @@ export default function AdminPage() {
       if (!isAdminEmail(session.user.email)) {
         setUser(null);
         storeAdminAccessToken("");
+        setAuthError("You are not authorized to access the admin portal.");
         toast.error("You are not authorized to access the admin portal.");
         router.replace("/admin/login");
         router.refresh();
@@ -313,6 +320,7 @@ export default function AdminPage() {
     } catch (error) {
       setUser(null);
       storeAdminAccessToken("");
+      setAuthError(error.message || "Unable to verify admin access.");
       toast.error(error.message || "Unable to verify admin access.");
       router.replace("/admin/login");
     } finally {
@@ -363,6 +371,7 @@ export default function AdminPage() {
   async function handleLogout() {
     setUser(null);
     setCheckingAuth(false);
+    setAuthError("");
     storeAdminAccessToken("");
 
     try {
@@ -736,6 +745,54 @@ export default function AdminPage() {
     });
   }
 
+  async function adminApiRequest(path, options = {}) {
+    const accessToken = await getUploadAccessToken();
+
+    let response;
+
+    try {
+      response = await withTimeout(
+        fetch(path, {
+          ...options,
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            ...(options.headers || {}),
+          },
+        }),
+        ADMIN_DB_TIMEOUT_MS,
+        "Admin database request timed out. Please try again."
+      );
+    } catch (error) {
+      throw createUploadError(
+        error.message || "Admin database request failed.",
+        error
+      );
+    }
+
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw createUploadError(
+        `Admin database request failed (${response.status}): ${
+          payload.error || response.statusText || "Unknown error"
+        }`
+      );
+    }
+
+    return payload;
+  }
+
+  function setUploadStage(label, percent = null) {
+    setUploadProgress({
+      active: true,
+      label,
+      current: 0,
+      total: 0,
+      percent,
+    });
+  }
+
   async function uploadImages(
     files,
     label = "Uploading images",
@@ -889,6 +946,7 @@ export default function AdminPage() {
       });
 
       uploadedImageUrls.push(uploadDetails.publicUrl);
+      setUploadStage(`${label}: image ${current} uploaded`, 100);
       logUploadDebug("upload completed", uploadDetails);
     }
 
@@ -921,9 +979,9 @@ export default function AdminPage() {
     );
   }
 
-  async function saveProductVariants(productId) {
+  async function prepareProductVariants(productId) {
     if (!supportsPrintVariants(category)) {
-      return;
+      return [];
     }
 
     const variantsToCreate = variantDrafts.filter(
@@ -934,7 +992,7 @@ export default function AdminPage() {
     );
 
     if (variantsToCreate.length === 0) {
-      return;
+      return [];
     }
 
     const variantRows = [];
@@ -959,24 +1017,7 @@ export default function AdminPage() {
       });
     }
 
-    const hasNewDefault = variantRows.some((variant) => variant.is_default);
-
-    if (hasNewDefault) {
-      const { error: defaultError } = await supabase
-        .from("product_variants")
-        .update({ is_default: false })
-        .eq("product_id", productId);
-
-      if (defaultError) {
-        throw new Error(defaultError.message);
-      }
-    }
-
-    const { error } = await supabase.from("product_variants").insert(variantRows);
-
-    if (error) {
-      throw new Error(error.message);
-    }
+    return variantRows;
   }
 
   async function handleDeleteVariant(variantId) {
@@ -984,12 +1025,12 @@ export default function AdminPage() {
 
     if (!confirmed) return;
 
-    const { error } = await supabase
-      .from("product_variants")
-      .delete()
-      .eq("id", variantId);
-
-    if (error) {
+    try {
+      await adminApiRequest("/api/admin/product-variants", {
+        method: "DELETE",
+        body: JSON.stringify({ variantId }),
+      });
+    } catch (error) {
       toast.error(error.message);
       return;
     }
@@ -1079,23 +1120,16 @@ export default function AdminPage() {
       .map((url) => url?.split("/products/")[1])
       .filter(Boolean);
 
-    if (filePaths.length > 0) {
-      const { error: storageError } = await supabase.storage
-        .from(PRODUCTS_STORAGE_BUCKET)
-        .remove(filePaths);
-
-      if (storageError) {
-        toast.error(storageError.message);
-        return;
-      }
-    }
-
-    const { error } = await supabase
-      .from("products")
-      .delete()
-      .eq("id", product.id);
-
-    if (error) {
+    try {
+      await adminApiRequest("/api/admin/products", {
+        method: "DELETE",
+        body: JSON.stringify({
+          productId: product.id,
+          imageUrls: imagesToDelete,
+          filePaths,
+        }),
+      });
+    } catch (error) {
       toast.error(error.message);
       return;
     }
@@ -1137,17 +1171,29 @@ export default function AdminPage() {
           updatedProduct.gallery_images = uploadedImageUrls;
         }
 
-        const { error } = await supabase
-          .from("products")
-          .update(updatedProduct)
-          .eq("id", editingProductId);
+        const variantRows = await prepareProductVariants(editingProductId);
 
-        if (error) {
-          toast.error(error.message);
-          return;
+        setUploadStage("Saving product...");
+        await adminApiRequest("/api/admin/products", {
+          method: "PATCH",
+          body: JSON.stringify({
+            productId: editingProductId,
+            product: updatedProduct,
+          }),
+        });
+
+        if (variantRows.length > 0) {
+          setUploadStage("Saving variants...");
+          await adminApiRequest("/api/admin/product-variants", {
+            method: "POST",
+            body: JSON.stringify({
+              productId: editingProductId,
+              variants: variantRows,
+            }),
+          });
         }
 
-        await saveProductVariants(editingProductId);
+        setUploadStage("Complete.", 100);
         resetForm();
         toast.success("Product updated successfully.");
         setProductsLoaded(false);
@@ -1162,11 +1208,13 @@ export default function AdminPage() {
       }
 
       const uploadedImageUrls = await uploadImages(imageFiles, "Product images");
+      const variantRows = await prepareProductVariants(null);
 
-      const { data: insertedProduct, error } = await supabase
-        .from("products")
-        .insert([
-          {
+      setUploadStage("Saving product...");
+      const { productId } = await adminApiRequest("/api/admin/products", {
+        method: "POST",
+        body: JSON.stringify({
+          product: {
             title,
             category,
             price,
@@ -1174,16 +1222,21 @@ export default function AdminPage() {
             image_url: uploadedImageUrls[0],
             gallery_images: uploadedImageUrls,
           },
-        ])
-        .select("id")
-        .single();
+        }),
+      });
 
-      if (error) {
-        toast.error(error.message);
-        return;
+      if (variantRows.length > 0) {
+        setUploadStage("Saving variants...");
+        await adminApiRequest("/api/admin/product-variants", {
+          method: "POST",
+          body: JSON.stringify({
+            productId,
+            variants: variantRows,
+          }),
+        });
       }
 
-      await saveProductVariants(insertedProduct.id);
+      setUploadStage("Complete.", 100);
       resetForm();
       toast.success("Product uploaded successfully.");
       setProductsLoaded(false);
@@ -1204,10 +1257,23 @@ export default function AdminPage() {
   }
 
   async function handleUpdateInquiryStatus(id, newStatus) {
-    const { error } = await supabase
-      .from("checkout_inquiries")
-      .update({ status: normalizeOrderStatus(newStatus) })
-      .eq("id", id);
+    let result;
+
+    try {
+      result = await withTimeout(
+        supabase
+          .from("checkout_inquiries")
+          .update({ status: normalizeOrderStatus(newStatus) })
+          .eq("id", id),
+        ADMIN_DB_TIMEOUT_MS,
+        "Timed out while updating order status."
+      );
+    } catch (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    const { error } = result;
 
     if (error) {
       toast.error(error.message);
@@ -1236,6 +1302,24 @@ export default function AdminPage() {
       <div className="container py-5 text-center">
         <h4 className="fw-bold">Checking admin access...</h4>
         <p className="text-muted">Please wait.</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="container py-5 text-center" style={{ marginTop: "80px" }}>
+        <h4 className="fw-bold">Admin login required</h4>
+        <p className="text-muted">
+          {authError || "Please log in to access the admin portal."}
+        </p>
+        <button
+          type="button"
+          className="btn btn-dark"
+          onClick={() => router.replace("/admin/login")}
+        >
+          Go to Admin Login
+        </button>
       </div>
     );
   }
@@ -1793,9 +1877,8 @@ export default function AdminPage() {
 
               <button className="btn btn-dark" disabled={isSavingProduct}>
                 {isSavingProduct
-                  ? editingProductId
-                    ? "Saving changes..."
-                    : "Uploading product..."
+                  ? uploadProgress.label ||
+                    (editingProductId ? "Saving changes..." : "Uploading product...")
                   : editingProductId
                   ? "Save Changes"
                   : "Upload Product"}
