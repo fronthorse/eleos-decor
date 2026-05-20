@@ -21,6 +21,7 @@ import {
   supportsPrintVariants,
 } from "../../lib/productVariants";
 import imageCompression from "browser-image-compression";
+import * as tus from "tus-js-client";
 
 const PRODUCT_PAGE_SIZE = 12;
 const INQUIRY_PAGE_SIZE = 10;
@@ -33,8 +34,10 @@ const PRODUCT_IMAGE_COMPRESSION_OPTIONS = {
 const MAX_ORIGINAL_UPLOAD_SIZE_MB = 3;
 const SMALL_IMAGE_SKIP_COMPRESSION_MB = 0.75;
 const IMAGE_COMPRESSION_TIMEOUT_MS = 45000;
-const STORAGE_UPLOAD_TIMEOUT_MS = 60000;
 const PRODUCTS_STORAGE_BUCKET = "products";
+const SUPABASE_STORAGE_HOST = "https://qexvohhfowswnryqugvr.storage.supabase.co";
+const SUPABASE_TUS_ENDPOINT = `${SUPABASE_STORAGE_HOST}/storage/v1/upload/resumable`;
+const TUS_CHUNK_SIZE = 6 * 1024 * 1024;
 const ADMIN_ACCESS_TOKEN_STORAGE_KEY = "admin_access_token";
 const ADMIN_PRODUCT_LIST_FIELDS =
   "id,title,category,price,description,image_url,gallery_images,created_at";
@@ -92,6 +95,55 @@ function getImageContentType(file) {
   if (fileName.endsWith(".heif")) return "image/heif";
 
   return "image/jpeg";
+}
+
+function getFileExtension(fileName, contentType) {
+  const lowerFileName = String(fileName || "").toLowerCase();
+
+  if (lowerFileName.endsWith(".png")) return "png";
+  if (lowerFileName.endsWith(".webp")) return "webp";
+  if (lowerFileName.endsWith(".gif")) return "gif";
+  if (lowerFileName.endsWith(".avif")) return "avif";
+  if (lowerFileName.endsWith(".heic")) return "heic";
+  if (lowerFileName.endsWith(".heif")) return "heif";
+  if (lowerFileName.endsWith(".jpeg")) return "jpg";
+  if (lowerFileName.endsWith(".jpg")) return "jpg";
+
+  const lowerContentType = String(contentType || "").toLowerCase();
+
+  if (lowerContentType === "image/png") return "png";
+  if (lowerContentType === "image/webp") return "webp";
+  if (lowerContentType === "image/gif") return "gif";
+  if (lowerContentType === "image/avif") return "avif";
+  if (lowerContentType === "image/heic") return "heic";
+  if (lowerContentType === "image/heif") return "heif";
+
+  return "jpg";
+}
+
+function createStoragePath(file, contentType, uploadType) {
+  const date = new Date();
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const randomId =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const extension = getFileExtension(file?.name, contentType);
+
+  return `${uploadType}/${year}/${month}/${randomId}.${extension}`;
+}
+
+function getTusErrorMessage(error) {
+  const status =
+    error?.originalResponse?.getStatus?.() || error?.response?.status || "";
+  const body =
+    error?.originalResponse?.getBody?.() || error?.response?.body || "";
+  const message = error?.message || "Storage upload failed.";
+
+  return [status ? `status ${status}` : "", message, body]
+    .filter(Boolean)
+    .join(": ");
 }
 
 function logUploadDebug(stage, details = {}) {
@@ -193,14 +245,15 @@ export default function AdminPage() {
   const [adminAccessTokenAvailable, setAdminAccessTokenAvailable] =
     useState(false);
   const [uploadDebug, setUploadDebug] = useState({
-    createUploadUrlStatus: "idle",
-    signedUploadStatus: "idle",
+    tusEndpointStatus: "idle",
+    tusUploadStatus: "idle",
   });
   const [uploadProgress, setUploadProgress] = useState({
     active: false,
     label: "",
     current: 0,
     total: 0,
+    percent: null,
   });
 
   const productTotalPages = Math.max(
@@ -573,84 +626,114 @@ export default function AdminPage() {
     );
   }
 
-  async function createSignedUploadDetails({
+  async function uploadFileWithTus({
     accessToken,
-    filename,
+    file,
+    path,
     contentType,
-    uploadType,
+    publicUrl,
     imageNumber,
+    imageTotal,
+    label,
   }) {
-    let signedUrlResult;
-
     setUploadDebug((current) => ({
       ...current,
-      createUploadUrlStatus: "requesting",
+      tusEndpointStatus: SUPABASE_TUS_ENDPOINT,
+      tusUploadStatus: "starting",
     }));
 
-    try {
-      signedUrlResult = await withTimeout(
-        fetch("/api/admin/create-upload-url", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            filename,
-            contentType,
-            uploadType,
-          }),
-        }),
-        STORAGE_UPLOAD_TIMEOUT_MS,
-        `Image ${imageNumber} upload setup timed out. Please try again.`
-      );
-    } catch (error) {
-      setUploadDebug((current) => ({
-        ...current,
-        createUploadUrlStatus: `failed: ${error.message || "request error"}`,
-      }));
+    return new Promise((resolve, reject) => {
+      const upload = new tus.Upload(file, {
+        endpoint: SUPABASE_TUS_ENDPOINT,
+        chunkSize: TUS_CHUNK_SIZE,
+        retryDelays: [0, 1000, 3000, 5000, 10000],
+        uploadDataDuringCreation: true,
+        removeFingerprintOnSuccess: true,
+        metadata: {
+          bucketName: PRODUCTS_STORAGE_BUCKET,
+          objectName: path,
+          contentType,
+          cacheControl: "3600",
+        },
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+          "x-upsert": "false",
+        },
+        onError(error) {
+          const message = getTusErrorMessage(error);
 
-      throw createUploadError(
-        `Signed URL request failed: ${
-          error.message || `Unable to prepare image ${imageNumber} upload.`
-        }`,
-        error
-      );
-    }
+          setUploadDebug((current) => ({
+            ...current,
+            tusUploadStatus: `failed: ${message}`,
+          }));
 
-    const uploadDetails = await signedUrlResult.json().catch(() => ({}));
-    const statusMessage = uploadDetails.error || signedUrlResult.statusText;
+          reject(
+            createUploadError(
+              `Supabase resumable upload failed: ${message}`,
+              error
+            )
+          );
+        },
+        onProgress(bytesUploaded, bytesTotal) {
+          const percent =
+            bytesTotal > 0
+              ? Math.round((bytesUploaded / bytesTotal) * 100)
+              : null;
 
-    setUploadDebug((current) => ({
-      ...current,
-      createUploadUrlStatus: `${signedUrlResult.status}${
-        statusMessage ? ` ${statusMessage}` : ""
-      }`,
-    }));
+          setUploadDebug((current) => ({
+            ...current,
+            tusUploadStatus:
+              percent === null ? "uploading" : `uploading ${percent}%`,
+          }));
 
-    if (!signedUrlResult.ok) {
-      const isAuthFailure =
-        signedUrlResult.status === 401 || signedUrlResult.status === 403;
-      const message =
-        uploadDetails.error || "Unable to prepare storage upload.";
+          setUploadProgress({
+            active: true,
+            label: `${label}: uploading image ${imageNumber} of ${imageTotal}`,
+            current: imageNumber,
+            total: imageTotal,
+            percent,
+          });
+        },
+        onSuccess() {
+          setUploadDebug((current) => ({
+            ...current,
+            tusUploadStatus: "success",
+          }));
 
-      throw createUploadError(
-        `Signed URL request failed (${signedUrlResult.status}): ${message}`,
-        null,
-        isAuthFailure ? "UPLOAD_AUTH_REJECTED" : ""
-      );
-    }
+          resolve({
+            bucket: PRODUCTS_STORAGE_BUCKET,
+            path,
+            publicUrl,
+          });
+        },
+      });
 
-    if (
-      !uploadDetails.path ||
-      !uploadDetails.token ||
-      !uploadDetails.bucket ||
-      !uploadDetails.publicUrl
-    ) {
-      throw createUploadError("Upload setup completed without storage details.");
-    }
+      upload
+        .findPreviousUploads()
+        .then((previousUploads) => {
+          if (previousUploads.length > 0) {
+            upload.resumeFromPreviousUpload(previousUploads[0]);
+          }
 
-    return uploadDetails;
+          upload.start();
+        })
+        .catch((error) => {
+          const message = getTusErrorMessage(error);
+
+          setUploadDebug((current) => ({
+            ...current,
+            tusUploadStatus: `failed: ${message}`,
+          }));
+
+          reject(
+            createUploadError(
+              `Unable to start Supabase resumable upload: ${message}`,
+              error
+            )
+          );
+        });
+    });
   }
 
   async function uploadImages(
@@ -684,6 +767,10 @@ export default function AdminPage() {
       );
     }
 
+    if (!user || !isAdminEmail(user.email)) {
+      throw createUploadError("Only a logged-in admin can upload images.");
+    }
+
     const accessToken = await getUploadAccessToken();
 
     for (const [index, file] of fileList.entries()) {
@@ -695,6 +782,7 @@ export default function AdminPage() {
         label: `${label}: optimizing image ${current} of ${fileList.length}`,
         current: index,
         total: fileList.length,
+        percent: null,
       });
 
       let uploadFile = file;
@@ -764,119 +852,44 @@ export default function AdminPage() {
       const uploadContentType = getImageContentType(uploadFile);
       const currentUploadType =
         uploadType === "product" && index > 0 ? "gallery" : uploadType;
-
-      setUploadProgress({
-        active: true,
-        label: `${label}: preparing image ${current} of ${fileList.length}`,
-        current,
-        total: fileList.length,
-      });
-
-      const uploadDetails = await createSignedUploadDetails({
-        accessToken,
-        filename: uploadFile.name || file.name || `image-${current}.jpg`,
-        contentType: uploadContentType,
-        uploadType: currentUploadType,
-        imageNumber: current,
-      });
-
-      setUploadDebug((current) => ({
-        ...current,
-        signedUploadStatus: "uploading",
-      }));
+      const path = createStoragePath(
+        uploadFile,
+        uploadContentType,
+        currentUploadType
+      );
+      const { data: publicUrlData } = supabase.storage
+        .from(PRODUCTS_STORAGE_BUCKET)
+        .getPublicUrl(path);
 
       setUploadProgress({
         active: true,
         label: `${label}: uploading image ${current} of ${fileList.length}`,
         current,
         total: fileList.length,
+        percent: 0,
       });
 
-      try {
-        logUploadDebug("signed storage upload started", {
-          bucket: uploadDetails.bucket,
-          path: uploadDetails.path,
-          uploadType: currentUploadType,
-          contentType: uploadContentType,
-          fileSize: uploadFile.size || file.size,
-        });
+      logUploadDebug("tus storage upload started", {
+        bucket: PRODUCTS_STORAGE_BUCKET,
+        path,
+        uploadType: currentUploadType,
+        contentType: uploadContentType,
+        fileSize: uploadFile.size || file.size,
+      });
 
-        const { error: uploadError } = await withTimeout(
-          supabase.storage
-            .from(uploadDetails.bucket)
-            .uploadToSignedUrl(
-              uploadDetails.path,
-              uploadDetails.token,
-              uploadFile,
-              {
-                contentType: uploadContentType,
-                upsert: false,
-              }
-            ),
-          STORAGE_UPLOAD_TIMEOUT_MS,
-          `Image ${current} upload timed out after ${Math.round(
-            STORAGE_UPLOAD_TIMEOUT_MS / 1000
-          )} seconds. Please try again.`
-        );
-
-        if (uploadError) {
-          throw uploadError;
-        }
-
-        setUploadDebug((currentDebug) => ({
-          ...currentDebug,
-          signedUploadStatus: "success",
-        }));
-
-        logUploadDebug("signed storage upload completed", {
-          bucket: uploadDetails.bucket,
-          path: uploadDetails.path,
-          publicUrl: uploadDetails.publicUrl,
-        });
-      } catch (error) {
-        if (isTimeoutError(error)) {
-          setUploadDebug((currentDebug) => ({
-            ...currentDebug,
-            signedUploadStatus: `failed: ${error.message}`,
-          }));
-
-          logUploadDebug("signed storage upload timed out", {
-            contentType: uploadContentType,
-            fileSize: uploadFile.size || file.size,
-          });
-
-          throw createUploadError(error.message, error);
-        }
-
-        setUploadDebug((currentDebug) => ({
-          ...currentDebug,
-          signedUploadStatus: `failed: ${
-            error.message || "storage upload error"
-          }`,
-        }));
-
-        logUploadDebug("signed storage upload failed", {
-          label,
-          bucket: uploadDetails.bucket,
-          path: uploadDetails.path,
-          contentType: uploadContentType,
-          error,
-        });
-
-        throw createUploadError(
-          `Supabase direct upload failed: ${
-            error.message || `Unable to upload image ${current}.`
-          }`,
-          error
-        );
-      }
+      const uploadDetails = await uploadFileWithTus({
+        accessToken,
+        file: uploadFile,
+        path,
+        contentType: uploadContentType,
+        publicUrl: publicUrlData.publicUrl,
+        imageNumber: current,
+        imageTotal: fileList.length,
+        label,
+      });
 
       uploadedImageUrls.push(uploadDetails.publicUrl);
-      logUploadDebug("upload completed", {
-        bucket: uploadDetails.bucket || PRODUCTS_STORAGE_BUCKET,
-        path: uploadDetails.path || "",
-        publicUrl: uploadDetails.publicUrl || "",
-      });
+      logUploadDebug("upload completed", uploadDetails);
     }
 
     return uploadedImageUrls;
@@ -1013,6 +1026,7 @@ export default function AdminPage() {
       label: "",
       current: 0,
       total: 0,
+      percent: null,
     });
   }
 
@@ -1101,8 +1115,8 @@ export default function AdminPage() {
 
     setIsSavingProduct(true);
     setUploadDebug({
-      createUploadUrlStatus: "idle",
-      signedUploadStatus: "idle",
+      tusEndpointStatus: "idle",
+      tusUploadStatus: "idle",
     });
 
     try {
@@ -1176,21 +1190,6 @@ export default function AdminPage() {
       setAnalyticsLoaded(false);
       setActiveTab("products");
     } catch (error) {
-      if (error.code === "UPLOAD_AUTH_REJECTED") {
-        const shouldRelogin = window.confirm(
-          `${error.message}\n\nLog in again now?`
-        );
-
-        if (shouldRelogin) {
-          router.replace("/admin/login");
-          router.refresh();
-        } else {
-          toast.error(error.message);
-        }
-
-        return;
-      }
-
       toast.error(error.message);
     } finally {
       setIsSavingProduct(false);
@@ -1199,6 +1198,7 @@ export default function AdminPage() {
         label: "",
         current: 0,
         total: 0,
+        percent: null,
       });
     }
   }
@@ -1761,9 +1761,9 @@ export default function AdminPage() {
             <div className="admin-form-actions">
               <p className="text-muted small mb-2">
                 Upload debug: token exists:{" "}
-                {adminAccessTokenAvailable ? "yes" : "no"} | create-upload-url
-                status: {uploadDebug.createUploadUrlStatus} | signed upload
-                status: {uploadDebug.signedUploadStatus}
+                {adminAccessTokenAvailable ? "yes" : "no"} | TUS endpoint:{" "}
+                {uploadDebug.tusEndpointStatus} | TUS upload:{" "}
+                {uploadDebug.tusUploadStatus}
               </p>
 
               {uploadProgress.active && (
@@ -1779,7 +1779,10 @@ export default function AdminPage() {
                         style={{
                           width: `${Math.min(
                             100,
-                            (uploadProgress.current / uploadProgress.total) * 100
+                            uploadProgress.percent ??
+                              (uploadProgress.current /
+                                uploadProgress.total) *
+                                100
                           )}%`,
                         }}
                       />
