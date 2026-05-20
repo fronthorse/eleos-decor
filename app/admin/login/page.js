@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
 import { isAdminEmail } from "../../../lib/adminAuth";
-import { getSessionSafely } from "../../../lib/supabase/auth";
+import { getSessionSafely, withTimeout } from "../../../lib/supabase/auth";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -20,19 +20,28 @@ export default function AdminLoginPage() {
     let cancelled = false;
 
     async function checkExistingSession() {
-      const { session } = await getSessionSafely(supabase);
+      try {
+        const { session, error } = await getSessionSafely(supabase);
 
-      if (cancelled) {
-        return;
+        if (cancelled) {
+          return;
+        }
+
+        if (isAdminEmail(session?.user?.email)) {
+          router.replace("/admin");
+          return;
+        }
+
+        setMessage(error ? "Please log in to continue." : "");
+      } catch {
+        if (!cancelled) {
+          setMessage("Please log in to continue.");
+        }
+      } finally {
+        if (!cancelled) {
+          setCheckingSession(false);
+        }
       }
-
-      if (isAdminEmail(session?.user?.email)) {
-        router.replace("/admin");
-        return;
-      }
-
-      setCheckingSession(false);
-      setMessage("");
     }
 
     checkExistingSession();
@@ -51,27 +60,34 @@ export default function AdminLoginPage() {
     setIsSubmitting(true);
     setMessage("Logging in...");
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { data, error } = await withTimeout(
+        supabase.auth.signInWithPassword({
+          email,
+          password,
+        }),
+        20000,
+        "Login timed out. Please check your connection and try again."
+      );
 
-    if (error) {
-      setMessage(error.message);
+      if (error) {
+        throw error;
+      }
+
+      if (!isAdminEmail(data.user?.email)) {
+        await supabase.auth.signOut();
+        setMessage("You are not authorized to access the admin portal.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      setMessage("Login successful. Redirecting...");
+      router.replace("/admin");
+      router.refresh();
+    } catch (error) {
+      setMessage(error.message || "Login failed. Please try again.");
       setIsSubmitting(false);
-      return;
     }
-
-    if (!isAdminEmail(data.user?.email)) {
-      await supabase.auth.signOut();
-      setMessage("You are not authorized to access the admin portal.");
-      setIsSubmitting(false);
-      return;
-    }
-
-    setMessage("Login successful. Redirecting...");
-    router.replace("/admin");
-    router.refresh();
   }
 
   return (

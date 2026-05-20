@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
 import { isAdminEmail } from "../../lib/adminAuth";
-import { getSessionSafely } from "../../lib/supabase/auth";
+import { getSessionSafely, withTimeout } from "../../lib/supabase/auth";
 import {
   formatOrderStatus,
   getOrderStatusDescription,
@@ -30,6 +30,8 @@ const PRODUCT_IMAGE_COMPRESSION_OPTIONS = {
   useWebWorker: true,
   initialQuality: 0.78,
 };
+const IMAGE_COMPRESSION_TIMEOUT_MS = 30000;
+const STORAGE_UPLOAD_TIMEOUT_MS = 60000;
 const ADMIN_PRODUCT_LIST_FIELDS =
   "id,title,category,price,description,image_url,gallery_images,created_at";
 
@@ -44,7 +46,24 @@ function handlePreviewImageError(event) {
 }
 
 function createSafeFileName(fileName) {
-  return `${Date.now()}-${fileName.replaceAll(" ", "-")}`;
+  const fallbackName = `product-image-${Date.now()}.jpg`;
+  const safeName = String(fileName || fallbackName)
+    .replaceAll(" ", "-")
+    .replace(/[^a-zA-Z0-9._-]/g, "-");
+
+  return `${Date.now()}-${safeName}`;
+}
+
+function getImageFilesFromInput(files) {
+  return Array.from(files || []).filter((file) => {
+    const type = String(file?.type || "");
+    const name = String(file?.name || "");
+
+    return (
+      type.startsWith("image/") ||
+      /\.(avif|gif|heic|heif|jpe?g|png|webp)$/i.test(name)
+    );
+  });
 }
 
 function getPositivePage(value) {
@@ -87,6 +106,7 @@ function getFileSummary(files = []) {
 export default function AdminPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const authCheckIdRef = useRef(0);
 
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -151,27 +171,56 @@ export default function AdminPage() {
   );
 
   const checkUserSession = useCallback(async () => {
-    const { session, error } = await getSessionSafely(supabase);
+    const authCheckId = authCheckIdRef.current + 1;
+    authCheckIdRef.current = authCheckId;
+    setCheckingAuth(true);
 
-    if (!session) {
-      if (error) {
-        toast.error("Your session expired. Please log in again.");
+    try {
+      const { session, error } = await getSessionSafely(supabase);
+
+      if (authCheckId !== authCheckIdRef.current) {
+        return;
       }
 
-      router.push("/admin/login");
-      return;
-    }
+      if (!session) {
+        setUser(null);
+        setCheckingAuth(false);
 
-    if (!isAdminEmail(session.user.email)) {
-      await supabase.auth.signOut();
-      toast.error("You are not authorized to access the admin portal.");
-      router.push("/customer/login");
-      router.refresh();
-      return;
-    }
+        if (error) {
+          toast.error("Your session expired. Please log in again.");
+        }
 
-    setUser(session.user);
-    setCheckingAuth(false);
+        router.replace("/admin/login");
+        return;
+      }
+
+      if (!isAdminEmail(session.user.email)) {
+        await withTimeout(
+          supabase.auth.signOut(),
+          8000,
+          "Unable to clear the current session."
+        ).catch(() => {});
+
+        setUser(null);
+        setCheckingAuth(false);
+        toast.error("You are not authorized to access the admin portal.");
+        router.replace("/customer/login");
+        router.refresh();
+        return;
+      }
+
+      setUser(session.user);
+      setCheckingAuth(false);
+    } catch (error) {
+      if (authCheckId !== authCheckIdRef.current) {
+        return;
+      }
+
+      setUser(null);
+      setCheckingAuth(false);
+      toast.error(error.message || "Unable to verify admin access.");
+      router.replace("/admin/login");
+    }
   }, [router, supabase]);
 
   useEffect(() => {
@@ -449,7 +498,11 @@ export default function AdminPage() {
 
   async function uploadImages(files, label = "Uploading images") {
     const uploadedImageUrls = [];
-    const fileList = Array.from(files || []);
+    const fileList = getImageFilesFromInput(files);
+
+    if (fileList.length === 0) {
+      return uploadedImageUrls;
+    }
 
     for (const [index, file] of fileList.entries()) {
       const current = index + 1;
@@ -461,12 +514,21 @@ export default function AdminPage() {
         total: fileList.length,
       });
 
-      const compressedFile = await imageCompression(
-        file,
-        PRODUCT_IMAGE_COMPRESSION_OPTIONS
-      );
+      let compressedFile;
 
-      const safeFileName = createSafeFileName(compressedFile.name);
+      try {
+        compressedFile = await withTimeout(
+          imageCompression(file, PRODUCT_IMAGE_COMPRESSION_OPTIONS),
+          IMAGE_COMPRESSION_TIMEOUT_MS,
+          `Image ${current} took too long to optimize. Please try a smaller image.`
+        );
+      } catch (error) {
+        throw new Error(
+          error.message || `Unable to optimize image ${current}.`
+        );
+      }
+
+      const safeFileName = createSafeFileName(compressedFile.name || file.name);
 
       setUploadProgress({
         active: true,
@@ -475,9 +537,19 @@ export default function AdminPage() {
         total: fileList.length,
       });
 
-      const { error: uploadError } = await supabase.storage
-        .from("products")
-        .upload(safeFileName, compressedFile);
+      let uploadResult;
+
+      try {
+        uploadResult = await withTimeout(
+          supabase.storage.from("products").upload(safeFileName, compressedFile),
+          STORAGE_UPLOAD_TIMEOUT_MS,
+          `Image ${current} upload timed out. Please check your connection and try again.`
+        );
+      } catch (error) {
+        throw new Error(error.message || `Unable to upload image ${current}.`);
+      }
+
+      const { error: uploadError } = uploadResult;
 
       if (uploadError) {
         throw new Error(uploadError.message);
@@ -1159,7 +1231,9 @@ export default function AdminPage() {
                 className="form-control admin-file-input"
                 accept="image/*"
                 multiple
-                onChange={(e) => setImageFiles(Array.from(e.target.files))}
+                onChange={(e) =>
+                  setImageFiles(getImageFilesFromInput(e.target.files))
+                }
                 required={!editingProductId}
                 disabled={isSavingProduct}
               />
@@ -1265,7 +1339,9 @@ export default function AdminPage() {
                           accept="image/*"
                           onChange={(e) =>
                             updateVariantDraft(variant.clientId, {
-                              imageFiles: Array.from(e.target.files),
+                              imageFiles: getImageFilesFromInput(
+                                e.target.files
+                              ),
                             })
                           }
                           disabled={isSavingProduct}
@@ -1286,7 +1362,9 @@ export default function AdminPage() {
                           multiple
                           onChange={(e) =>
                             updateVariantDraft(variant.clientId, {
-                              galleryFiles: Array.from(e.target.files),
+                              galleryFiles: getImageFilesFromInput(
+                                e.target.files
+                              ),
                             })
                           }
                           disabled={isSavingProduct}
