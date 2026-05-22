@@ -35,6 +35,8 @@ const MAX_ORIGINAL_UPLOAD_SIZE_MB = 3;
 const SMALL_IMAGE_SKIP_COMPRESSION_MB = 0.75;
 const IMAGE_COMPRESSION_TIMEOUT_MS = 45000;
 const ADMIN_DB_TIMEOUT_MS = 20000;
+const ADMIN_AUTH_TIMEOUT_MS = 10000;
+const ADMIN_AUTH_FALLBACK_MS = 12000;
 const PRODUCTS_STORAGE_BUCKET = "products";
 const SUPABASE_STORAGE_HOST = "https://qexvohhfowswnryqugvr.storage.supabase.co";
 const SUPABASE_TUS_ENDPOINT = `${SUPABASE_STORAGE_HOST}/storage/v1/upload/resumable`;
@@ -196,6 +198,7 @@ export default function AdminPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const adminAccessTokenRef = useRef("");
+  const authCheckIdRef = useRef(0);
 
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -286,14 +289,22 @@ export default function AdminPage() {
   }, []);
 
   const checkAdminSession = useCallback(async () => {
+    const authCheckId = authCheckIdRef.current + 1;
+    authCheckIdRef.current = authCheckId;
+
     setCheckingAuth(true);
     setAuthError("");
 
     try {
       const { session, error } = await getSessionSafely(supabase, {
-        timeoutMs: 8000,
-        timeoutMessage: "Unable to check your session. Please log in again.",
+        timeoutMs: ADMIN_AUTH_TIMEOUT_MS,
+        timeoutMessage:
+          "Admin session check timed out. Please retry or log in again.",
       });
+
+      if (authCheckId !== authCheckIdRef.current) {
+        return;
+      }
 
       if (error || !session?.user) {
         setUser(null);
@@ -301,7 +312,6 @@ export default function AdminPage() {
         setAuthError(
           error?.message || "Please log in to access the admin portal."
         );
-        router.replace("/admin/login");
         return;
       }
 
@@ -310,27 +320,79 @@ export default function AdminPage() {
         storeAdminAccessToken("");
         setAuthError("You are not authorized to access the admin portal.");
         toast.error("You are not authorized to access the admin portal.");
-        router.replace("/admin/login");
-        router.refresh();
         return;
       }
 
       storeAdminAccessToken(session.access_token || "");
       setUser(session.user);
     } catch (error) {
+      if (authCheckId !== authCheckIdRef.current) {
+        return;
+      }
+
       setUser(null);
       storeAdminAccessToken("");
       setAuthError(error.message || "Unable to verify admin access.");
       toast.error(error.message || "Unable to verify admin access.");
-      router.replace("/admin/login");
     } finally {
-      setCheckingAuth(false);
+      if (authCheckId === authCheckIdRef.current) {
+        setCheckingAuth(false);
+      }
     }
-  }, [router, storeAdminAccessToken, supabase]);
+  }, [storeAdminAccessToken, supabase]);
 
   useEffect(() => {
     checkAdminSession();
   }, [checkAdminSession]);
+
+  useEffect(() => {
+    if (!checkingAuth) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      authCheckIdRef.current += 1;
+      setCheckingAuth(false);
+      setAuthError(
+        "Admin session check is taking too long. Please retry or log in again."
+      );
+    }, ADMIN_AUTH_FALLBACK_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [checkingAuth]);
+
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
+        setUser(null);
+        storeAdminAccessToken("");
+        setAuthError("Your admin session ended. Please log in again.");
+        setCheckingAuth(false);
+        return;
+      }
+
+      if (!session?.user) {
+        return;
+      }
+
+      if (!isAdminEmail(session.user.email)) {
+        setUser(null);
+        storeAdminAccessToken("");
+        setAuthError("You are not authorized to access the admin portal.");
+        setCheckingAuth(false);
+        return;
+      }
+
+      storeAdminAccessToken(session.access_token || "");
+      setUser(session.user);
+      setAuthError("");
+      setCheckingAuth(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [storeAdminAccessToken, supabase.auth]);
 
   useEffect(() => {
     if (!user || activeTab !== "products") return;
@@ -616,21 +678,35 @@ export default function AdminPage() {
   }
 
   async function getUploadAccessToken() {
+    const { session, error } = await getSessionSafely(supabase, {
+      timeoutMs: ADMIN_AUTH_TIMEOUT_MS,
+      timeoutMessage:
+        "Unable to refresh the admin session. Please retry before uploading.",
+    });
+
+    if (session?.access_token && isAdminEmail(session.user?.email)) {
+      setUser(session.user);
+      storeAdminAccessToken(session.access_token);
+      setAdminAccessTokenAvailable(true);
+      return session.access_token;
+    }
+
     const storedToken =
       adminAccessTokenRef.current ||
       (typeof window !== "undefined"
         ? window.sessionStorage.getItem(ADMIN_ACCESS_TOKEN_STORAGE_KEY)
         : "");
 
-    if (storedToken) {
+    if (storedToken && error?.name === "TimeoutError") {
       adminAccessTokenRef.current = storedToken;
       setAdminAccessTokenAvailable(true);
       return storedToken;
     }
 
     throw createUploadError(
-      "Admin session unavailable. Please refresh or login again.",
-      null,
+      error?.message ||
+        "Admin session unavailable. Please retry or log in again.",
+      error,
       "UPLOAD_TOKEN_MISSING"
     );
   }
@@ -1313,13 +1389,22 @@ export default function AdminPage() {
         <p className="text-muted">
           {authError || "Please log in to access the admin portal."}
         </p>
-        <button
-          type="button"
-          className="btn btn-dark"
-          onClick={() => router.replace("/admin/login")}
-        >
-          Go to Admin Login
-        </button>
+        <div className="d-flex justify-content-center gap-2 flex-wrap">
+          <button
+            type="button"
+            className="btn btn-dark"
+            onClick={checkAdminSession}
+          >
+            Retry Session Check
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline-dark"
+            onClick={() => router.replace("/admin/login")}
+          >
+            Go to Admin Login
+          </button>
+        </div>
       </div>
     );
   }

@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
 import { isAdminEmail } from "../../../lib/adminAuth";
-import { withTimeout } from "../../../lib/supabase/auth";
+import { getSessionSafely, withTimeout } from "../../../lib/supabase/auth";
+
+const ADMIN_LOGIN_SESSION_TIMEOUT_MS = 10000;
 
 function clearAdminTransientState() {
   if (typeof window === "undefined") {
@@ -33,22 +35,17 @@ export default function AdminLoginPage() {
     clearAdminTransientState();
 
     async function checkExistingSession() {
-      try {
-        const { data } = await withTimeout(
-          supabase.auth.getSession(),
-          8000,
-          "Unable to check your session."
-        );
+      const { session } = await getSessionSafely(supabase, {
+        timeoutMs: ADMIN_LOGIN_SESSION_TIMEOUT_MS,
+        timeoutMessage: "Unable to check your current session.",
+      });
 
-        if (cancelled) {
-          return;
-        }
+      if (cancelled) {
+        return;
+      }
 
-        if (isAdminEmail(data.session?.user?.email)) {
-          router.replace("/admin");
-        }
-      } catch {
-        // Login remains available even if reading an existing session is slow.
+      if (isAdminEmail(session?.user?.email)) {
+        router.replace("/admin");
       }
     }
 
@@ -85,6 +82,24 @@ export default function AdminLoginPage() {
 
       if (!isAdminEmail(data.user?.email)) {
         setMessage("You are not authorized to access the admin portal.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      const { session, error: sessionError } = await getSessionSafely(
+        supabase,
+        {
+          timeoutMs: ADMIN_LOGIN_SESSION_TIMEOUT_MS,
+          timeoutMessage:
+            "Login succeeded, but session verification timed out. Please retry.",
+        }
+      );
+
+      if (sessionError || !session?.user) {
+        setMessage(
+          sessionError?.message ||
+            "Login succeeded, but the admin session was not available. Please retry."
+        );
         setIsSubmitting(false);
         return;
       }

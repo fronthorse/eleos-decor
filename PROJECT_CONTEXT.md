@@ -455,6 +455,14 @@ Performance index SQL:
 
 # KNOWN ISSUES / WATCHLIST
 
+## Unresolved Current Task
+- Current active bug cluster is not fixed yet and must be treated as unresolved:
+  - Admin login is failing or hanging at "authenticating user".
+  - Product upload is failing and appears to expire/log out the admin session during upload attempts.
+  - Products are failing to load on the shop page.
+  - Mobile experience is currently poor, with slow loading and messy/general layout or usability issues.
+- Priority is to investigate authentication/session stability, admin product upload flow, shop product loading, and mobile performance/responsiveness before marking this task complete.
+
 ## Areas to be careful with
 - CheckoutForm
 - MiniCartDrawer
