@@ -3,24 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
-import { isAdminEmail } from "../../../lib/adminAuth";
-import { getSessionSafely, withTimeout } from "../../../lib/supabase/auth";
+import { withTimeout } from "../../../lib/supabase/auth";
+import {
+  logAdminAuthDebug,
+  verifyAdminSession,
+} from "../../../lib/adminSession";
 
-const ADMIN_LOGIN_SESSION_TIMEOUT_MS = 10000;
 const ADMIN_LOGIN_TIMEOUT_MS = 20000;
 const ADMIN_STORAGE_KEYS = [
   "admin_access_token",
   "adminAuthError",
   "adminUploadError",
 ];
-
-function logAdminAuthDebug(stage, details = {}) {
-  if (process.env.NODE_ENV !== "development") {
-    return;
-  }
-
-  console.info("[admin auth]", stage, details);
-}
 
 function clearAdminTransientState() {
   if (typeof window === "undefined") {
@@ -52,71 +46,37 @@ export default function AdminLoginPage() {
     clearAdminTransientState();
 
     async function checkExistingSession() {
-      logAdminAuthDebug("checking session", { route: "/admin/login" });
-
       try {
-        const { session, error } = await getSessionSafely(supabase, {
-          timeoutMs: ADMIN_LOGIN_SESSION_TIMEOUT_MS,
-          timeoutMessage: "Unable to check your current session.",
+        const {
+          user,
+          error,
+          status,
+        } = await verifyAdminSession(supabase, {
+          source: "admin-login-existing-session",
+          isCancelled: () => cancelled,
         });
 
         if (cancelled) {
           return;
         }
 
-        if (error || !session?.user || !session?.access_token) {
-          if (error) {
-            logAdminAuthDebug("session check failed", {
-              message: error.message,
-            });
-          } else {
-            logAdminAuthDebug("no session found", { route: "/admin/login" });
-          }
-          return;
-        }
-
-        logAdminAuthDebug("session found", { email: session.user.email });
-        logAdminAuthDebug("admin check started", { email: session.user.email });
-
-        let verifiedUser = null;
-        let verifyError = null;
-
-        try {
-          const result = await withTimeout(
-            supabase.auth.getUser(session.access_token),
-            ADMIN_LOGIN_SESSION_TIMEOUT_MS,
-            "Existing session verification timed out."
-          );
-
-          verifiedUser = result.data?.user || null;
-          verifyError = result.error || null;
-        } catch (error) {
-          verifyError = error;
-        }
-
-        if (cancelled) {
-          return;
-        }
-
-        if (verifyError || !verifiedUser) {
-          logAdminAuthDebug("admin rejected", {
-            reason: verifyError?.message || "No verified user",
-          });
-          await supabase.auth.signOut();
-          clearAdminTransientState();
-          return;
-        }
-
-        if (isAdminEmail(verifiedUser.email)) {
-          logAdminAuthDebug("admin confirmed", { email: verifiedUser.email });
+        if (status === "ok" && user) {
           router.replace("/admin");
           return;
         }
 
-        logAdminAuthDebug("admin rejected", { email: verifiedUser.email });
-        await supabase.auth.signOut();
-        clearAdminTransientState();
-        setMessage("Admin login required. Please sign in with an admin account.");
+        if (status === "no_session" || status === "retryable") {
+          return;
+        }
+
+        if (status === "invalid_session" || status === "not_admin") {
+          await supabase.auth.signOut();
+          clearAdminTransientState();
+          setMessage(
+            error?.message ||
+              "Admin login required. Please sign in with an admin account."
+          );
+        }
       } finally {
         if (!cancelled) {
           setIsCheckingSession(false);
@@ -158,55 +118,32 @@ export default function AdminLoginPage() {
         throw error;
       }
 
-      if (!isAdminEmail(data.user?.email)) {
-        logAdminAuthDebug("admin rejected", { email: data.user?.email });
-        await supabase.auth.signOut();
-        clearAdminTransientState();
-        setMessage("You are not authorized to access the admin portal.");
-        return;
-      }
+      logAdminAuthDebug("login password accepted", {
+        email: data.user?.email || "",
+      });
 
-      const { session, error: sessionError } = await getSessionSafely(
-        supabase,
-        {
-          timeoutMs: ADMIN_LOGIN_SESSION_TIMEOUT_MS,
-          timeoutMessage:
-            "Login succeeded, but session verification timed out. Please retry.",
+      const {
+        user,
+        error: adminError,
+        status,
+      } = await verifyAdminSession(supabase, {
+        source: "admin-login-after-password",
+      });
+
+      if (status !== "ok" || !user) {
+        if (status === "invalid_session" || status === "not_admin") {
+          await supabase.auth.signOut();
+          clearAdminTransientState();
         }
-      );
 
-      if (sessionError || !session?.user) {
-        logAdminAuthDebug("login failure", {
-          reason: sessionError?.message || "No session after login",
-        });
         setMessage(
-          sessionError?.message ||
-            "Login succeeded, but the admin session was not available. Please retry."
+          adminError?.message ||
+            "Admin verification failed. Please retry or use an admin account."
         );
         return;
       }
 
-      logAdminAuthDebug("admin check started", { email: session.user.email });
-
-      const { data: verifiedData, error: verifyError } = await withTimeout(
-        supabase.auth.getUser(session.access_token),
-        ADMIN_LOGIN_SESSION_TIMEOUT_MS,
-        "Admin user verification timed out. Please retry."
-      );
-
-      if (verifyError || !isAdminEmail(verifiedData.user?.email)) {
-        logAdminAuthDebug("admin rejected", {
-          email: verifiedData.user?.email,
-          reason: verifyError?.message,
-        });
-        await supabase.auth.signOut();
-        clearAdminTransientState();
-        setMessage("You are not authorized to access the admin portal.");
-        return;
-      }
-
-      logAdminAuthDebug("admin confirmed", { email: verifiedData.user.email });
-      logAdminAuthDebug("login success", { email: verifiedData.user.email });
+      logAdminAuthDebug("login success", { email: user.email });
       setMessage("Login successful. Redirecting...");
       shouldResetSubmitting = false;
       router.replace("/admin");

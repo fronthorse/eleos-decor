@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
 import { isAdminEmail } from "../../lib/adminAuth";
-import { getSessionSafely, withTimeout } from "../../lib/supabase/auth";
+import { withTimeout } from "../../lib/supabase/auth";
+import {
+  logAdminAuthDebug,
+  verifyAdminSession as runVerifyAdminSession,
+} from "../../lib/adminSession";
 import {
   formatOrderStatus,
   getOrderStatusDescription,
@@ -35,9 +39,6 @@ const MAX_ORIGINAL_UPLOAD_SIZE_MB = 3;
 const SMALL_IMAGE_SKIP_COMPRESSION_MB = 0.75;
 const IMAGE_COMPRESSION_TIMEOUT_MS = 45000;
 const ADMIN_DB_TIMEOUT_MS = 20000;
-const ADMIN_AUTH_TIMEOUT_MS = 15000;
-const ADMIN_AUTH_MAX_ATTEMPTS = 3;
-const ADMIN_AUTH_RETRY_DELAY_MS = 1200;
 const PRODUCTS_STORAGE_BUCKET = "products";
 const SUPABASE_STORAGE_HOST = "https://qexvohhfowswnryqugvr.storage.supabase.co";
 const SUPABASE_TUS_ENDPOINT = `${SUPABASE_STORAGE_HOST}/storage/v1/upload/resumable`;
@@ -79,26 +80,6 @@ function getFileSizeInMb(file) {
 
 function isTimeoutError(error) {
   return error?.name === "TimeoutError";
-}
-
-function wait(ms) {
-  return new Promise((resolve) => {
-    globalThis.setTimeout(resolve, ms);
-  });
-}
-
-function isRecoverableAuthError(error) {
-  if (!error) return false;
-  if (isTimeoutError(error)) return true;
-
-  const message = String(error.message || "").toLowerCase();
-
-  return (
-    message.includes("failed to fetch") ||
-    message.includes("network") ||
-    message.includes("timeout") ||
-    message.includes("timed out")
-  );
 }
 
 function createUploadError(message, cause, code = "") {
@@ -181,14 +162,6 @@ function logUploadDebug(stage, details = {}) {
   }
 
   console.info("[admin upload]", stage, details);
-}
-
-function logAdminAuthDebug(stage, details = {}) {
-  if (process.env.NODE_ENV !== "development") {
-    return;
-  }
-
-  console.info("[admin auth]", stage, details);
 }
 
 function clearAdminStoredState() {
@@ -353,117 +326,10 @@ export default function AdminPage() {
       return verificationPromiseRef.current;
     }
 
-    verificationPromiseRef.current = (async () => {
-      isVerifyingRef.current = true;
-      let lastError = null;
-
-      for (let attempt = 1; attempt <= ADMIN_AUTH_MAX_ATTEMPTS; attempt += 1) {
-        logAdminAuthDebug("checking session", { attempt });
-
-        const { session, error } = await getSessionSafely(supabase, {
-          timeoutMs: ADMIN_AUTH_TIMEOUT_MS,
-          timeoutMessage:
-            "Admin session check timed out. Please retry or log in again.",
-        });
-
-        if (error) {
-          lastError = error;
-          logAdminAuthDebug("session check failed", {
-            attempt,
-            message: error.message,
-          });
-
-          if (isRecoverableAuthError(error) && attempt < ADMIN_AUTH_MAX_ATTEMPTS) {
-            await wait(ADMIN_AUTH_RETRY_DELAY_MS);
-            continue;
-          }
-
-          return { session: null, user: null, error, status: "retryable" };
-        }
-
-        if (!session?.user || !session?.access_token) {
-          logAdminAuthDebug("no session found", { attempt });
-          return { session: null, user: null, error: null, status: "no_session" };
-        }
-
-        logAdminAuthDebug("session found", {
-          attempt,
-          email: session.user.email,
-        });
-        logAdminAuthDebug("admin check started", {
-          attempt,
-          email: session.user.email,
-        });
-
-        let verifiedUser = null;
-        let verifyError = null;
-
-        try {
-          const result = await withTimeout(
-            supabase.auth.getUser(session.access_token),
-            ADMIN_AUTH_TIMEOUT_MS,
-            "Admin user verification timed out. Please retry."
-          );
-
-          verifiedUser = result.data?.user || null;
-          verifyError = result.error || null;
-        } catch (error) {
-          verifyError = error;
-        }
-
-        if (verifyError || !verifiedUser) {
-          lastError =
-            verifyError ||
-            new Error("Admin session is invalid. Please log in again.");
-
-          logAdminAuthDebug("admin verification failed", {
-            attempt,
-            reason: lastError.message,
-          });
-
-          if (
-            isRecoverableAuthError(lastError) &&
-            attempt < ADMIN_AUTH_MAX_ATTEMPTS
-          ) {
-            await wait(ADMIN_AUTH_RETRY_DELAY_MS);
-            continue;
-          }
-
-          logAdminAuthDebug("admin rejected", { reason: lastError.message });
-
-          return {
-            session: null,
-            user: null,
-            error: lastError,
-            status: isRecoverableAuthError(lastError)
-              ? "retryable"
-              : "invalid_session",
-          };
-        }
-
-        if (!isAdminEmail(verifiedUser.email)) {
-          logAdminAuthDebug("admin rejected", { email: verifiedUser.email });
-          return {
-            session,
-            user: verifiedUser,
-            error: new Error("You are not authorized to access the admin portal."),
-            status: "not_admin",
-          };
-        }
-
-        logAdminAuthDebug("admin confirmed", { email: verifiedUser.email });
-        return { session, user: verifiedUser, error: null, status: "ok" };
-      }
-
-      return {
-        session: null,
-        user: null,
-        error:
-          lastError ||
-          new Error("Admin session check timed out. Please retry."),
-        status: "retryable",
-      };
-    })().finally(() => {
+    isVerifyingRef.current = true;
+    verificationPromiseRef.current = runVerifyAdminSession(supabase, {
+      source: "admin-page",
+    }).finally(() => {
       isVerifyingRef.current = false;
       verificationPromiseRef.current = null;
     });
