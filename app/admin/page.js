@@ -42,6 +42,11 @@ const SUPABASE_STORAGE_HOST = "https://qexvohhfowswnryqugvr.storage.supabase.co"
 const SUPABASE_TUS_ENDPOINT = `${SUPABASE_STORAGE_HOST}/storage/v1/upload/resumable`;
 const TUS_CHUNK_SIZE = 6 * 1024 * 1024;
 const ADMIN_ACCESS_TOKEN_STORAGE_KEY = "admin_access_token";
+const ADMIN_STORAGE_KEYS = [
+  ADMIN_ACCESS_TOKEN_STORAGE_KEY,
+  "adminAuthError",
+  "adminUploadError",
+];
 const ADMIN_PRODUCT_LIST_FIELDS =
   "id,title,category,price,description,image_url,gallery_images,created_at";
 
@@ -157,6 +162,29 @@ function logUploadDebug(stage, details = {}) {
   console.info("[admin upload]", stage, details);
 }
 
+function logAdminAuthDebug(stage, details = {}) {
+  if (process.env.NODE_ENV !== "development") {
+    return;
+  }
+
+  console.info("[admin auth]", stage, details);
+}
+
+function clearAdminStoredState() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    ADMIN_STORAGE_KEYS.forEach((key) => {
+      window.sessionStorage.removeItem(key);
+      window.localStorage.removeItem(key);
+    });
+  } catch {
+    // Storage access can be restricted on some mobile browsers.
+  }
+}
+
 function getPositivePage(value) {
   return Number.isFinite(value) && value > 0 ? value : 1;
 }
@@ -199,8 +227,10 @@ export default function AdminPage() {
   const supabase = useMemo(() => createClient(), []);
   const adminAccessTokenRef = useRef("");
   const authCheckIdRef = useRef(0);
+  const loggingOutRef = useRef(false);
 
   const [user, setUser] = useState(null);
+  const [adminVerified, setAdminVerified] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [authError, setAuthError] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
@@ -288,6 +318,76 @@ export default function AdminPage() {
     }
   }, []);
 
+  const clearAdminSessionState = useCallback(() => {
+    adminAccessTokenRef.current = "";
+    setAdminAccessTokenAvailable(false);
+    clearAdminStoredState();
+  }, []);
+
+  const verifyAdminSession = useCallback(async () => {
+    logAdminAuthDebug("checking session");
+
+    const { session, error } = await getSessionSafely(supabase, {
+      timeoutMs: ADMIN_AUTH_TIMEOUT_MS,
+      timeoutMessage:
+        "Admin session check timed out. Please retry or log in again.",
+    });
+
+    if (error) {
+      logAdminAuthDebug("session check failed", { message: error.message });
+      return { session: null, user: null, error };
+    }
+
+    if (!session?.user || !session?.access_token) {
+      logAdminAuthDebug("no session found");
+      return { session: null, user: null, error: null };
+    }
+
+    logAdminAuthDebug("session found", { email: session.user.email });
+    logAdminAuthDebug("admin check started", { email: session.user.email });
+
+    let verifiedUser = null;
+    let verifyError = null;
+
+    try {
+      const result = await withTimeout(
+        supabase.auth.getUser(session.access_token),
+        ADMIN_AUTH_TIMEOUT_MS,
+        "Admin user verification timed out. Please retry."
+      );
+
+      verifiedUser = result.data?.user || null;
+      verifyError = result.error || null;
+    } catch (error) {
+      verifyError = error;
+    }
+
+    if (verifyError || !verifiedUser) {
+      logAdminAuthDebug("admin rejected", {
+        reason: verifyError?.message || "No verified user",
+      });
+      return {
+        session: null,
+        user: null,
+        error:
+          verifyError ||
+          new Error("Admin session is invalid. Please log in again."),
+      };
+    }
+
+    if (!isAdminEmail(verifiedUser.email)) {
+      logAdminAuthDebug("admin rejected", { email: verifiedUser.email });
+      return {
+        session,
+        user: verifiedUser,
+        error: new Error("You are not authorized to access the admin portal."),
+      };
+    }
+
+    logAdminAuthDebug("admin confirmed", { email: verifiedUser.email });
+    return { session, user: verifiedUser, error: null };
+  }, [supabase]);
+
   const checkAdminSession = useCallback(async () => {
     const authCheckId = authCheckIdRef.current + 1;
     authCheckIdRef.current = authCheckId;
@@ -296,42 +396,38 @@ export default function AdminPage() {
     setAuthError("");
 
     try {
-      const { session, error } = await getSessionSafely(supabase, {
-        timeoutMs: ADMIN_AUTH_TIMEOUT_MS,
-        timeoutMessage:
-          "Admin session check timed out. Please retry or log in again.",
-      });
+      const { session, user: verifiedUser, error } = await verifyAdminSession();
 
       if (authCheckId !== authCheckIdRef.current) {
         return;
       }
 
-      if (error || !session?.user) {
+      if (error || !verifiedUser) {
         setUser(null);
-        storeAdminAccessToken("");
+        setAdminVerified(false);
+        clearAdminSessionState();
+
+        if (error?.name !== "TimeoutError") {
+          await supabase.auth.signOut();
+        }
+
         setAuthError(
           error?.message || "Please log in to access the admin portal."
         );
         return;
       }
 
-      if (!isAdminEmail(session.user.email)) {
-        setUser(null);
-        storeAdminAccessToken("");
-        setAuthError("You are not authorized to access the admin portal.");
-        toast.error("You are not authorized to access the admin portal.");
-        return;
-      }
-
       storeAdminAccessToken(session.access_token || "");
-      setUser(session.user);
+      setUser(verifiedUser);
+      setAdminVerified(true);
     } catch (error) {
       if (authCheckId !== authCheckIdRef.current) {
         return;
       }
 
       setUser(null);
-      storeAdminAccessToken("");
+      setAdminVerified(false);
+      clearAdminSessionState();
       setAuthError(error.message || "Unable to verify admin access.");
       toast.error(error.message || "Unable to verify admin access.");
     } finally {
@@ -339,7 +435,12 @@ export default function AdminPage() {
         setCheckingAuth(false);
       }
     }
-  }, [storeAdminAccessToken, supabase]);
+  }, [
+    clearAdminSessionState,
+    storeAdminAccessToken,
+    supabase.auth,
+    verifyAdminSession,
+  ]);
 
   useEffect(() => {
     checkAdminSession();
@@ -352,6 +453,9 @@ export default function AdminPage() {
 
     const timeoutId = window.setTimeout(() => {
       authCheckIdRef.current += 1;
+      setUser(null);
+      setAdminVerified(false);
+      clearAdminSessionState();
       setCheckingAuth(false);
       setAuthError(
         "Admin session check is taking too long. Please retry or log in again."
@@ -359,15 +463,20 @@ export default function AdminPage() {
     }, ADMIN_AUTH_FALLBACK_MS);
 
     return () => window.clearTimeout(timeoutId);
-  }, [checkingAuth]);
+  }, [checkingAuth, clearAdminSessionState]);
 
   useEffect(() => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
+      if (loggingOutRef.current) {
+        return;
+      }
+
       if (event === "SIGNED_OUT") {
         setUser(null);
-        storeAdminAccessToken("");
+        setAdminVerified(false);
+        clearAdminSessionState();
         setAuthError("Your admin session ended. Please log in again.");
         setCheckingAuth(false);
         return;
@@ -379,44 +488,60 @@ export default function AdminPage() {
 
       if (!isAdminEmail(session.user.email)) {
         setUser(null);
-        storeAdminAccessToken("");
+        setAdminVerified(false);
+        clearAdminSessionState();
         setAuthError("You are not authorized to access the admin portal.");
         setCheckingAuth(false);
+        return;
+      }
+
+      if (!adminVerified) {
         return;
       }
 
       storeAdminAccessToken(session.access_token || "");
       setUser(session.user);
       setAuthError("");
-      setCheckingAuth(false);
     });
 
     return () => subscription.unsubscribe();
-  }, [storeAdminAccessToken, supabase.auth]);
+  }, [
+    adminVerified,
+    clearAdminSessionState,
+    storeAdminAccessToken,
+    supabase.auth,
+  ]);
 
   useEffect(() => {
-    if (!user || activeTab !== "products") return;
+    if (!adminVerified || !user || activeTab !== "products") return;
     if (productsLoaded && productsLoadedPage === productPage) return;
 
     fetchProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, productPage, productsLoaded, productsLoadedPage, user]);
+  }, [activeTab, adminVerified, productPage, productsLoaded, productsLoadedPage, user]);
 
   useEffect(() => {
-    if (!user || activeTab !== "inquiries") return;
+    if (!adminVerified || !user || activeTab !== "inquiries") return;
     if (inquiriesLoaded && inquiriesLoadedPage === inquiryPage) return;
 
     fetchInquiries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, inquiriesLoaded, inquiriesLoadedPage, inquiryPage, user]);
+  }, [activeTab, adminVerified, inquiriesLoaded, inquiriesLoadedPage, inquiryPage, user]);
 
   useEffect(() => {
-    if (!user || (activeTab !== "overview" && activeTab !== "analytics")) return;
+    if (
+      !adminVerified ||
+      !user ||
+      (activeTab !== "overview" && activeTab !== "analytics")
+    ) {
+      return;
+    }
+
     if (analyticsLoaded) return;
 
     fetchAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, analyticsLoaded, user]);
+  }, [activeTab, adminVerified, analyticsLoaded, user]);
 
   useEffect(() => {
     if (productPage > productTotalPages) {
@@ -431,10 +556,14 @@ export default function AdminPage() {
   }, [inquiryPage, inquiryTotalPages]);
 
   async function handleLogout() {
+    logAdminAuthDebug("logout started", { email: user?.email });
+    loggingOutRef.current = true;
+    authCheckIdRef.current += 1;
     setUser(null);
+    setAdminVerified(false);
     setCheckingAuth(false);
     setAuthError("");
-    storeAdminAccessToken("");
+    clearAdminSessionState();
 
     try {
       await withTimeout(
@@ -445,8 +574,9 @@ export default function AdminPage() {
     } catch (error) {
       toast.error(error.message || "Unable to sign out cleanly.");
     } finally {
+      clearAdminSessionState();
+      logAdminAuthDebug("logout completed");
       router.replace("/admin/login");
-      router.refresh();
     }
   }
 
@@ -678,14 +808,11 @@ export default function AdminPage() {
   }
 
   async function getUploadAccessToken() {
-    const { session, error } = await getSessionSafely(supabase, {
-      timeoutMs: ADMIN_AUTH_TIMEOUT_MS,
-      timeoutMessage:
-        "Unable to refresh the admin session. Please retry before uploading.",
-    });
+    const { session, user: verifiedUser, error } = await verifyAdminSession();
 
-    if (session?.access_token && isAdminEmail(session.user?.email)) {
-      setUser(session.user);
+    if (session?.access_token && verifiedUser) {
+      setUser(verifiedUser);
+      setAdminVerified(true);
       storeAdminAccessToken(session.access_token);
       setAdminAccessTokenAvailable(true);
       return session.access_token;
