@@ -44,9 +44,7 @@ const PRODUCTS_STORAGE_BUCKET = "products";
 const SUPABASE_STORAGE_HOST = "https://qexvohhfowswnryqugvr.storage.supabase.co";
 const SUPABASE_TUS_ENDPOINT = `${SUPABASE_STORAGE_HOST}/storage/v1/upload/resumable`;
 const TUS_CHUNK_SIZE = 6 * 1024 * 1024;
-const ADMIN_ACCESS_TOKEN_STORAGE_KEY = "admin_access_token";
 const ADMIN_STORAGE_KEYS = [
-  ADMIN_ACCESS_TOKEN_STORAGE_KEY,
   "adminAuthError",
   "adminUploadError",
 ];
@@ -220,7 +218,6 @@ function getFileSummary(files = []) {
 export default function AdminPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const adminAccessTokenRef = useRef("");
   const authCheckIdRef = useRef(0);
   const isVerifyingRef = useRef(false);
   const verificationPromiseRef = useRef(null);
@@ -303,25 +300,10 @@ export default function AdminPage() {
   }, [adminVerified]);
 
   const storeAdminAccessToken = useCallback((accessToken = "") => {
-    adminAccessTokenRef.current = accessToken;
     setAdminAccessTokenAvailable(Boolean(accessToken));
-
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    if (accessToken) {
-      window.sessionStorage.setItem(
-        ADMIN_ACCESS_TOKEN_STORAGE_KEY,
-        accessToken
-      );
-    } else {
-      window.sessionStorage.removeItem(ADMIN_ACCESS_TOKEN_STORAGE_KEY);
-    }
   }, []);
 
   const clearAdminSessionState = useCallback(() => {
-    adminAccessTokenRef.current = "";
     setAdminAccessTokenAvailable(false);
     clearAdminStoredState();
   }, []);
@@ -814,18 +796,6 @@ export default function AdminPage() {
       storeAdminAccessToken(session.access_token);
       setAdminAccessTokenAvailable(true);
       return session.access_token;
-    }
-
-    const storedToken =
-      adminAccessTokenRef.current ||
-      (typeof window !== "undefined"
-        ? window.sessionStorage.getItem(ADMIN_ACCESS_TOKEN_STORAGE_KEY)
-        : "");
-
-    if (storedToken && error?.name === "TimeoutError") {
-      adminAccessTokenRef.current = storedToken;
-      setAdminAccessTokenAvailable(true);
-      return storedToken;
     }
 
     throw createUploadError(

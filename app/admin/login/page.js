@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
 import { withTimeout } from "../../../lib/supabase/auth";
+import { SUPABASE_AUTH_STORAGE_KEY } from "../../../lib/supabase/client";
 import {
   logAdminAuthDebug,
   verifyAdminSession,
@@ -12,7 +13,6 @@ import {
 const ADMIN_LOGIN_TIMEOUT_MS = 20000;
 const ADMIN_LOGIN_INITIAL_CHECK_MAX_MS = 6000;
 const ADMIN_STORAGE_KEYS = [
-  "admin_access_token",
   "adminAuthError",
   "adminUploadError",
 ];
@@ -30,6 +30,34 @@ function clearAdminTransientState() {
   } catch {
     // Storage access can be restricted on some mobile browsers.
   }
+}
+
+function logLoginAuthStorage(stage) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  let authStorageKeys = [];
+
+  try {
+    authStorageKeys = Object.keys(window.localStorage).filter((key) => {
+      const normalizedKey = key.toLowerCase();
+
+      return (
+        normalizedKey.includes("supabase") ||
+        normalizedKey.includes("auth") ||
+        normalizedKey.startsWith("sb-")
+      );
+    });
+  } catch {
+    authStorageKeys = ["localStorage-unavailable"];
+  }
+
+  logAdminAuthDebug(stage, {
+    expectedStorageKey: SUPABASE_AUTH_STORAGE_KEY,
+    authStorageKeys,
+    hasExpectedStorageKey: authStorageKeys.includes(SUPABASE_AUTH_STORAGE_KEY),
+  });
 }
 
 export default function AdminLoginPage() {
@@ -135,6 +163,7 @@ export default function AdminLoginPage() {
       logAdminAuthDebug("login password accepted", {
         email: data.user?.email || "",
       });
+      logLoginAuthStorage("login auth storage after password accepted");
 
       const {
         user,
@@ -158,6 +187,7 @@ export default function AdminLoginPage() {
       }
 
       logAdminAuthDebug("login success", { email: user.email });
+      logLoginAuthStorage("login auth storage after admin verification");
       setMessage("Login successful. Redirecting...");
       shouldResetSubmitting = false;
       router.replace("/admin");
