@@ -181,15 +181,18 @@ function getPaginationRange(page, pageSize) {
   };
 }
 
-function createVariantDraft(label = "") {
+function createVariantDraft(label = "", overrides = {}) {
   return {
     clientId: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     variant_label: label,
+    variant_type: "print",
     price_override: "",
     sku: "",
     is_default: false,
     imageFiles: [],
     galleryFiles: [],
+    isCollapsed: false,
+    ...overrides,
   };
 }
 
@@ -202,6 +205,83 @@ function getFileSummary(files = []) {
   const sizeInMb = totalSize / (1024 * 1024);
 
   return `${files.length} image${files.length === 1 ? "" : "s"} selected · ${sizeInMb.toFixed(1)} MB before compression`;
+}
+
+function formatAdminPrice(value) {
+  const numericValue = Number(String(value || "").replace(/[^\d.]/g, ""));
+
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return "Price not set";
+  }
+
+  return `\u20a6${numericValue.toLocaleString()}`;
+}
+
+function normalizeVariantLabel(label) {
+  return String(label || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function getDuplicateVariantLabels(drafts, existingVariants = []) {
+  const counts = new Map();
+
+  [...existingVariants, ...drafts].forEach((variant) => {
+    const hasPendingImage =
+      !variant.clientId || (variant.imageFiles && variant.imageFiles.length > 0);
+    const normalizedLabel = normalizeVariantLabel(variant.variant_label);
+
+    if (!normalizedLabel || !hasPendingImage) {
+      return;
+    }
+
+    counts.set(normalizedLabel, (counts.get(normalizedLabel) || 0) + 1);
+  });
+
+  return Array.from(counts.entries())
+    .filter(([, count]) => count > 1)
+    .map(([label]) => label);
+}
+
+function getUniqueVariantLabel(baseLabel, drafts, existingVariants = []) {
+  const usedLabels = new Set(
+    [...existingVariants, ...drafts]
+      .map((variant) => normalizeVariantLabel(variant.variant_label))
+      .filter(Boolean)
+  );
+  let label = baseLabel;
+  let suffix = 2;
+
+  while (usedLabels.has(normalizeVariantLabel(label))) {
+    label = `${baseLabel} ${suffix}`;
+    suffix += 1;
+  }
+
+  return label;
+}
+
+function LocalImagePreview({ alt, className = "", file, src }) {
+  const [objectUrl, setObjectUrl] = useState("");
+
+  useEffect(() => {
+    if (!file) {
+      setObjectUrl("");
+      return undefined;
+    }
+
+    const nextObjectUrl = URL.createObjectURL(file);
+    setObjectUrl(nextObjectUrl);
+
+    return () => URL.revokeObjectURL(nextObjectUrl);
+  }, [file]);
+
+  return (
+    <img
+      src={objectUrl || src || PRODUCT_IMAGE_FALLBACK}
+      alt={alt}
+      className={className}
+      loading="lazy"
+      onError={handlePreviewImageError}
+    />
+  );
 }
 
 export default function AdminPage() {
@@ -261,10 +341,12 @@ export default function AdminPage() {
   const [description, setDescription] = useState("");
   const [imageFiles, setImageFiles] = useState([]);
   const [variantDrafts, setVariantDrafts] = useState([
-    createVariantDraft("Print A"),
+    createVariantDraft("Print A", { is_default: true }),
   ]);
   const [existingVariants, setExistingVariants] = useState([]);
   const [editingProductId, setEditingProductId] = useState(null);
+  const [editingProductImageUrl, setEditingProductImageUrl] = useState("");
+  const [previewExpanded, setPreviewExpanded] = useState(true);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({
     active: false,
@@ -282,6 +364,22 @@ export default function AdminPage() {
     1,
     Math.ceil(inquiryCount / INQUIRY_PAGE_SIZE)
   );
+  const duplicateVariantLabels = useMemo(
+    () => getDuplicateVariantLabels(variantDrafts, existingVariants),
+    [existingVariants, variantDrafts]
+  );
+  const previewVariants = useMemo(
+    () => [
+      ...existingVariants,
+      ...variantDrafts.filter((variant) => variant.variant_label.trim()),
+    ],
+    [existingVariants, variantDrafts]
+  );
+  const previewImageFile = imageFiles[0] || null;
+  const previewTitle = title.trim() || "Product title";
+  const previewDescription =
+    description.trim() ||
+    "Product description will preview here as you refine the listing.";
 
   useEffect(() => {
     adminVerifiedRef.current = adminVerified;
@@ -1020,18 +1118,118 @@ export default function AdminPage() {
     );
   }
 
+  function addVariantDrafts(count = 1) {
+    setVariantDrafts((currentDrafts) => {
+      const nextDrafts = [...currentDrafts];
+
+      for (let index = 0; index < count; index += 1) {
+        const nextLetter = String.fromCharCode(65 + nextDrafts.length);
+        const nextLabel = getUniqueVariantLabel(
+          `Print ${nextLetter}`,
+          nextDrafts,
+          existingVariants
+        );
+
+        nextDrafts.push(
+          createVariantDraft(nextLabel, {
+            is_default:
+              existingVariants.length === 0 &&
+              !nextDrafts.some((draft) => draft.is_default),
+          })
+        );
+      }
+
+      return nextDrafts;
+    });
+  }
+
   function addVariantDraft() {
-    const nextLetter = String.fromCharCode(65 + variantDrafts.length);
+    addVariantDrafts(1);
+  }
+
+  function duplicateVariantDraft(sourceDraft) {
     setVariantDrafts((currentDrafts) => [
       ...currentDrafts,
-      createVariantDraft(`Print ${nextLetter}`),
+      createVariantDraft(
+        getUniqueVariantLabel(
+          `${sourceDraft.variant_label || "Print"} Copy`,
+          currentDrafts,
+          existingVariants
+        ),
+        {
+          variant_type: sourceDraft.variant_type || "print",
+          price_override: sourceDraft.price_override,
+          sku: sourceDraft.sku ? `${sourceDraft.sku}-copy` : "",
+          imageFiles: [...(sourceDraft.imageFiles || [])],
+          galleryFiles: [...(sourceDraft.galleryFiles || [])],
+          is_default: false,
+        }
+      ),
     ]);
   }
 
-  function removeVariantDraft(clientId) {
+  function duplicateLastVariantDraft() {
+    const lastDraft = variantDrafts[variantDrafts.length - 1];
+
+    if (!lastDraft) {
+      addVariantDraft();
+      return;
+    }
+
+    duplicateVariantDraft(lastDraft);
+  }
+
+  function collapseAllVariantDrafts(isCollapsed) {
     setVariantDrafts((currentDrafts) =>
-      currentDrafts.filter((draft) => draft.clientId !== clientId)
+      currentDrafts.map((draft) => ({ ...draft, isCollapsed }))
     );
+  }
+
+  function moveVariantDraft(clientId, direction) {
+    setVariantDrafts((currentDrafts) => {
+      const currentIndex = currentDrafts.findIndex(
+        (draft) => draft.clientId === clientId
+      );
+      const nextIndex = currentIndex + direction;
+
+      if (
+        currentIndex < 0 ||
+        nextIndex < 0 ||
+        nextIndex >= currentDrafts.length
+      ) {
+        return currentDrafts;
+      }
+
+      const nextDrafts = [...currentDrafts];
+      const [movedDraft] = nextDrafts.splice(currentIndex, 1);
+      nextDrafts.splice(nextIndex, 0, movedDraft);
+
+      return nextDrafts;
+    });
+  }
+
+  function removeVariantDraft(clientId) {
+    setVariantDrafts((currentDrafts) => {
+      const removedDraft = currentDrafts.find(
+        (draft) => draft.clientId === clientId
+      );
+      const nextDrafts = currentDrafts.filter(
+        (draft) => draft.clientId !== clientId
+      );
+
+      if (
+        removedDraft?.is_default &&
+        existingVariants.length === 0 &&
+        nextDrafts.length > 0
+      ) {
+        return nextDrafts.map((draft, index) => ({
+          ...draft,
+          is_default: index === 0,
+        }));
+      }
+
+      return nextDrafts;
+    });
   }
 
   async function prepareProductVariants(productId) {
@@ -1045,6 +1243,17 @@ export default function AdminPage() {
         variant.imageFiles &&
         variant.imageFiles.length > 0
     );
+
+    const duplicateLabels = getDuplicateVariantLabels(
+      variantsToCreate,
+      existingVariants
+    );
+
+    if (duplicateLabels.length > 0) {
+      throw createUploadError(
+        `Variant labels must be unique: ${duplicateLabels.join(", ")}.`
+      );
+    }
 
     if (variantsToCreate.length === 0) {
       return [];
@@ -1061,7 +1270,7 @@ export default function AdminPage() {
       variantRows.push({
         product_id: productId,
         variant_label: variant.variant_label.trim(),
-        variant_type: "print",
+        variant_type: variant.variant_type || "print",
         image_url: uploadedImages[0],
         gallery: uploadedImages.slice(1),
         price_override: variant.price_override.trim() || null,
@@ -1120,7 +1329,9 @@ export default function AdminPage() {
     setPrice("");
     setDescription("");
     setImageFiles([]);
-    setVariantDrafts([createVariantDraft("Print A")]);
+    setEditingProductImageUrl("");
+    setPreviewExpanded(true);
+    setVariantDrafts([createVariantDraft("Print A", { is_default: true })]);
     setExistingVariants([]);
     setUploadProgress({
       active: false,
@@ -1156,10 +1367,12 @@ export default function AdminPage() {
     setPrice(product.price || "");
     setDescription(product.description || "");
     setImageFiles([]);
+    setEditingProductImageUrl(getProductPreviewImageSrc(product));
     setExistingVariants(
       supportsPrintVariants(product) ? await fetchProductVariants(product.id) : []
     );
     setVariantDrafts([createVariantDraft("Print A")]);
+    setPreviewExpanded(true);
     setActiveTab("upload");
     toast.success("Editing product.");
   }
@@ -1604,9 +1817,11 @@ export default function AdminPage() {
         )}
 
         {activeTab === "upload" && (
+          <div className="admin-product-editor-layout">
           <form
             onSubmit={handleUploadProduct}
             className="admin-product-form"
+            data-testid="admin-product-form"
           >
             <div className="admin-form-header">
               <div>
@@ -1641,6 +1856,7 @@ export default function AdminPage() {
                   className="form-control"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
+                  data-testid="admin-product-title"
                   required
                 />
               </div>
@@ -1663,6 +1879,7 @@ export default function AdminPage() {
                 rows="4"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                data-testid="admin-product-description"
                 required
               ></textarea>
             </div>
@@ -1681,6 +1898,7 @@ export default function AdminPage() {
                     className="form-select"
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
+                    data-testid="admin-product-category"
                     required
                   >
                     <option>Frames</option>
@@ -1714,6 +1932,7 @@ export default function AdminPage() {
                     className="form-control"
                     value={price}
                     onChange={(e) => setPrice(e.target.value)}
+                    data-testid="admin-product-price"
                     required
                   />
                 </div>
@@ -1740,6 +1959,7 @@ export default function AdminPage() {
                 onChange={(e) =>
                   setImageFiles(getImageFilesFromInput(e.target.files))
                 }
+                data-testid="admin-product-images"
                 required={!editingProductId}
                 disabled={isSavingProduct}
               />
@@ -1747,10 +1967,29 @@ export default function AdminPage() {
               <p className="admin-file-help mb-0 mt-2">
                 {getFileSummary(imageFiles)}
               </p>
+
+              {(imageFiles.length > 0 || editingProductImageUrl) && (
+                <div className="admin-image-preview-grid">
+                  {imageFiles.length > 0 ? (
+                    imageFiles.map((file, index) => (
+                      <LocalImagePreview
+                        key={`${file.name}-${file.lastModified}-${index}`}
+                        file={file}
+                        alt={`Product image ${index + 1}`}
+                      />
+                    ))
+                  ) : (
+                    <LocalImagePreview
+                      src={editingProductImageUrl}
+                      alt="Current product image"
+                    />
+                  )}
+                </div>
+              )}
             </div>
 
             {supportsPrintVariants(category) && (
-              <div className="admin-form-section admin-variant-panel">
+              <div className="admin-form-section admin-variant-panel" data-testid="variant-manager">
                 <div className="d-flex justify-content-between align-items-center mb-3">
                   <div>
                     <h5 className="fw-bold mb-1">Frame Print Variants</h5>
@@ -1760,14 +1999,55 @@ export default function AdminPage() {
                     </p>
                   </div>
 
+                  <div className="admin-variant-toolbar">
+                    <button
+                      type="button"
+                      onClick={addVariantDraft}
+                      className="btn btn-sm btn-dark"
+                      data-testid="variant-add"
+                      disabled={isSavingProduct}
+                    >
+                      Add Variant
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addVariantDrafts(3)}
+                      className="btn btn-sm btn-outline-dark"
+                      data-testid="variant-add-three"
+                      disabled={isSavingProduct}
+                    >
+                      Add 3 Variants
+                    </button>
+                    <button
+                      type="button"
+                      onClick={duplicateLastVariantDraft}
+                      className="btn btn-sm btn-outline-dark"
+                      data-testid="variant-duplicate-last"
+                      disabled={isSavingProduct}
+                    >
+                      Duplicate Last
+                    </button>
+                  </div>
+                </div>
+
+                <div className="admin-variant-subtoolbar">
                   <button
                     type="button"
-                    onClick={addVariantDraft}
-                    className="btn btn-sm btn-outline-dark"
+                    onClick={() => collapseAllVariantDrafts(true)}
+                    className="btn btn-sm btn-outline-secondary"
                     disabled={isSavingProduct}
                   >
-                    Add Print
+                    Collapse All
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => collapseAllVariantDrafts(false)}
+                    className="btn btn-sm btn-outline-secondary"
+                    disabled={isSavingProduct}
+                  >
+                    Expand All
+                  </button>
+                  <span>Use arrows to reorder draft variants before saving.</span>
                 </div>
 
                 {existingVariants.length > 0 && (
@@ -1804,9 +2084,86 @@ export default function AdminPage() {
                   </div>
                 )}
 
-                {variantDrafts.map((variant, index) => (
-                  <div className="admin-variant-draft" key={variant.clientId}>
-                    <div className="row g-3">
+                {variantDrafts.map((variant, index) => {
+                  const variantLabelDuplicate = duplicateVariantLabels.includes(
+                    normalizeVariantLabel(variant.variant_label)
+                  );
+
+                  return (
+                  <div
+                    className={`admin-variant-draft ${
+                      variant.isCollapsed ? "is-collapsed" : ""
+                    } ${variantLabelDuplicate ? "has-error" : ""}`}
+                    key={variant.clientId}
+                    data-testid="variant-card"
+                  >
+                    <div className="admin-variant-card-header">
+                      <button
+                        type="button"
+                        className="admin-icon-button"
+                        onClick={() =>
+                          updateVariantDraft(variant.clientId, {
+                            isCollapsed: !variant.isCollapsed,
+                          })
+                        }
+                        aria-label={
+                          variant.isCollapsed
+                            ? "Expand variant"
+                            : "Collapse variant"
+                        }
+                      >
+                        {variant.isCollapsed ? "+" : "-"}
+                      </button>
+
+                      <LocalImagePreview
+                        file={variant.imageFiles?.[0]}
+                        alt={variant.variant_label || "Variant preview"}
+                        className="admin-variant-thumb"
+                      />
+
+                      <div className="admin-variant-title">
+                        <strong>
+                          {index + 1}. {variant.variant_label || "Untitled print"}
+                        </strong>
+                        <span>
+                          {variant.is_default ? "Default variant" : "Print variant"}
+                        </span>
+                      </div>
+
+                      <div className="admin-variant-card-actions">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={() => moveVariantDraft(variant.clientId, -1)}
+                          disabled={isSavingProduct || index === 0}
+                        >
+                          Up
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={() => moveVariantDraft(variant.clientId, 1)}
+                          disabled={
+                            isSavingProduct || index === variantDrafts.length - 1
+                          }
+                        >
+                          Down
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-dark"
+                          onClick={() => duplicateVariantDraft(variant)}
+                          data-testid="variant-duplicate"
+                          disabled={isSavingProduct}
+                        >
+                          Duplicate
+                        </button>
+                      </div>
+                    </div>
+
+                    {!variant.isCollapsed && (
+                    <>
+                    <div className="row g-3 admin-variant-card-body">
                       <div className="col-md-6">
                         <label className="form-label">Variant Label</label>
                         <input
@@ -1818,7 +2175,13 @@ export default function AdminPage() {
                             })
                           }
                           placeholder={`Print ${String.fromCharCode(65 + index)}`}
+                          data-testid="variant-label"
                         />
+                        {variantLabelDuplicate && (
+                          <p className="admin-field-error">
+                            Variant labels must be unique.
+                          </p>
+                        )}
                       </div>
 
                       <div className="col-md-6">
@@ -1834,7 +2197,24 @@ export default function AdminPage() {
                             })
                           }
                           placeholder="Leave blank to use product price"
+                          data-testid="variant-price"
                         />
+                      </div>
+
+                      <div className="col-md-6">
+                        <label className="form-label">Variant Type</label>
+                        <select
+                          className="form-select"
+                          value={variant.variant_type || "print"}
+                          onChange={(e) =>
+                            updateVariantDraft(variant.clientId, {
+                              variant_type: e.target.value,
+                            })
+                          }
+                          data-testid="variant-type"
+                        >
+                          <option value="print">print</option>
+                        </select>
                       </div>
 
                       <div className="col-md-6">
@@ -1850,6 +2230,7 @@ export default function AdminPage() {
                               ),
                             })
                           }
+                          data-testid="variant-image"
                           disabled={isSavingProduct}
                         />
                         <p className="admin-file-help mb-0 mt-2">
@@ -1873,6 +2254,7 @@ export default function AdminPage() {
                               ),
                             })
                           }
+                          data-testid="variant-gallery"
                           disabled={isSavingProduct}
                         />
                         <p className="admin-file-help mb-0 mt-2">
@@ -1891,6 +2273,7 @@ export default function AdminPage() {
                             })
                           }
                           placeholder="Internal reference"
+                          data-testid="variant-sku"
                         />
                       </div>
 
@@ -1905,6 +2288,7 @@ export default function AdminPage() {
                                 is_default: e.target.checked,
                               })
                             }
+                            data-testid="variant-default"
                           />
                           <span className="form-check-label">
                             Default print
@@ -1912,19 +2296,39 @@ export default function AdminPage() {
                         </label>
                       </div>
                     </div>
+                    {(variant.imageFiles?.length > 0 ||
+                      variant.galleryFiles?.length > 0) && (
+                      <div className="admin-image-preview-grid admin-image-preview-grid-sm">
+                        {[...(variant.imageFiles || []), ...(variant.galleryFiles || [])].map(
+                          (file, fileIndex) => (
+                            <LocalImagePreview
+                              key={`${file.name}-${file.lastModified}-${fileIndex}`}
+                              file={file}
+                              alt={`${variant.variant_label || "Variant"} image ${
+                                fileIndex + 1
+                              }`}
+                            />
+                          )
+                        )}
+                      </div>
+                    )}
+                    </>
+                    )}
 
                     {variantDrafts.length > 1 && (
                       <button
                         type="button"
                         onClick={() => removeVariantDraft(variant.clientId)}
                         className="btn btn-sm btn-outline-danger mt-3"
+                        data-testid="variant-remove"
                         disabled={isSavingProduct}
                       >
-                        Remove Print Row
+                        Remove Variant
                       </button>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -1964,6 +2368,60 @@ export default function AdminPage() {
               </button>
             </div>
           </form>
+
+          <aside
+            className={`admin-product-preview-panel ${
+              previewExpanded ? "is-expanded" : "is-collapsed"
+            }`}
+            data-testid="product-preview-panel"
+          >
+            <button
+              type="button"
+              className="admin-preview-toggle"
+              onClick={() => setPreviewExpanded((expanded) => !expanded)}
+            >
+              Product Preview
+              <span>{previewExpanded ? "Hide" : "Show"}</span>
+            </button>
+
+            {previewExpanded && (
+              <div className="admin-preview-card">
+                <LocalImagePreview
+                  file={previewImageFile}
+                  src={editingProductImageUrl}
+                  alt={previewTitle}
+                  className="admin-preview-image"
+                />
+
+                <div className="admin-preview-content">
+                  <p className="admin-preview-category">{category}</p>
+                  <div className="admin-preview-title-row">
+                    <h5>{previewTitle}</h5>
+                    <strong>{formatAdminPrice(price)}</strong>
+                  </div>
+                  <p>{previewDescription}</p>
+
+                  {supportsPrintVariants(category) && previewVariants.length > 0 && (
+                    <div className="admin-preview-variants">
+                      <span>Print Options</span>
+                      {previewVariants.slice(0, 5).map((variant, index) => (
+                        <div
+                          className="admin-preview-variant-row"
+                          key={variant.id || variant.clientId || index}
+                        >
+                          <span>{variant.variant_label || `Print ${index + 1}`}</span>
+                          <strong>
+                            {formatAdminPrice(variant.price_override || price)}
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </aside>
+          </div>
         )}
 
         {activeTab === "inquiries" && (
