@@ -1,6 +1,13 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -58,6 +65,7 @@ function ShopContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const fetchIdRef = useRef(0);
 
   const categoryParam = searchParams.get("category") || "All";
   const spaceParam = searchParams.get("space") || "";
@@ -80,6 +88,8 @@ function ShopContent() {
   const [searchTerm, setSearchTerm] = useState(queryParam);
   const [filterOpen, setFilterOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
 
   const categories = [
     "All",
@@ -230,29 +240,38 @@ function ShopContent() {
   );
 
   const fetchProducts = useCallback(async () => {
+    const fetchId = fetchIdRef.current + 1;
+    const startedAt =
+      typeof performance !== "undefined" ? performance.now() : Date.now();
+    fetchIdRef.current = fetchId;
     setLoading(true);
+    setLoadError("");
 
     const cleanSearch = sanitizeProductSearchTerm(queryParam);
     const from = (pageParam - 1) * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
-    if (curatedFilter) {
-      try {
+    try {
+      if (curatedFilter) {
         const curatedResults = await fetchCuratedProducts({
           cleanSearch,
           from,
         });
 
+        if (fetchId !== fetchIdRef.current) {
+          return;
+        }
+
         setProducts(curatedResults.products);
         setTotalCount(curatedResults.totalCount);
         setLoading(false);
         return;
-      } catch (error) {
-        console.warn("Curated shop filter failed; using category fallback.", error);
       }
+    } catch (error) {
+      console.warn("Curated shop filter failed; using category fallback.", error);
     }
 
-    if (cleanSearch) {
+    if (cleanSearch || sortParam === "price-low" || sortParam === "price-high") {
       try {
         const { products: searchResults, totalCount: searchCount } =
           await searchProductsWithFullText(supabase, {
@@ -273,9 +292,17 @@ function ShopContent() {
               offset: 0,
             });
 
+          if (fetchId !== fetchIdRef.current) {
+            return;
+          }
+
           setProducts([]);
           setTotalCount(firstPageSearchCount);
           setLoading(false);
+          return;
+        }
+
+        if (fetchId !== fetchIdRef.current) {
           return;
         }
 
@@ -284,37 +311,64 @@ function ShopContent() {
         setLoading(false);
         return;
       } catch (error) {
-        console.warn("Full-text shop search failed; using fallback.", error);
+        console.warn("Shop RPC query failed; using fallback.", error);
       }
     }
 
-    let query = supabase
-      .from("products")
-      .select(PRODUCT_LIST_FIELDS, {
-        count: "exact",
-      });
+    try {
+      let query = supabase
+        .from("products")
+        .select(PRODUCT_LIST_FIELDS, {
+          count: "exact",
+        });
 
-    if (categoryParam !== "All") {
-      query = query.eq("category", categoryParam);
-    }
+      if (categoryParam !== "All") {
+        query = query.eq("category", categoryParam);
+      }
 
-    query = applyProductSearchFilter(query, cleanSearch);
+      query = applyProductSearchFilter(query, cleanSearch);
 
-    query = applyProductSort(query, sortParam);
+      query = applyProductSort(query, sortParam);
 
-    const { data, error, count } = await query.range(from, to);
+      const { data, error, count } = await query.range(from, to);
 
-    if (error) {
-      console.log(error);
+      if (error) {
+        throw error;
+      }
+
+      if (fetchId !== fetchIdRef.current) {
+        return;
+      }
+
+      setProducts(data || []);
+      setTotalCount(count || 0);
+    } catch (error) {
+      if (fetchId !== fetchIdRef.current) {
+        return;
+      }
+
+      console.error("Shop product load failed.", error);
       setProducts([]);
       setTotalCount(0);
-      setLoading(false);
-      return;
+      setLoadError(
+        error?.message ||
+          "Products could not be loaded. Please check your connection and try again."
+      );
+    } finally {
+      if (fetchId === fetchIdRef.current) {
+        const endedAt =
+          typeof performance !== "undefined" ? performance.now() : Date.now();
+        console.info("[shop products] load completed", {
+          fetchId,
+          page: pageParam,
+          category: categoryParam,
+          hasSearch: Boolean(cleanSearch),
+          sort: sortParam,
+          durationMs: Math.round(endedAt - startedAt),
+        });
+        setLoading(false);
+      }
     }
-
-    setProducts(data || []);
-    setTotalCount(count || 0);
-    setLoading(false);
   }, [
     categoryParam,
     curatedFilter,
@@ -331,7 +385,7 @@ function ShopContent() {
 
   useEffect(() => {
     fetchProducts();
-  }, [fetchProducts]);
+  }, [fetchProducts, retryKey]);
 
   useEffect(() => {
     if (loading || totalCount === 0 || pageParam <= totalPages) {
@@ -553,7 +607,25 @@ function ShopContent() {
             </div>
           )}
 
-          {!loading && products.length === 0 && (
+          {!loading && loadError && (
+            <div className="empty-state text-center" role="alert">
+              <div className="empty-state-icon">!</div>
+
+              <h4 className="fw-bold mb-2">Products could not load</h4>
+
+              <p className="text-muted mb-4">{loadError}</p>
+
+              <button
+                type="button"
+                className="btn btn-dark"
+                onClick={() => setRetryKey((key) => key + 1)}
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {!loading && !loadError && products.length === 0 && (
             <EmptyState
               title="No products found"
               message="Try another search term, category, or sorting option."
@@ -562,7 +634,7 @@ function ShopContent() {
             />
           )}
 
-          {!loading && products.length > 0 && (
+          {!loading && !loadError && products.length > 0 && (
             <>
               <div className="row g-3 g-lg-4 shop-product-grid">
                 {products.map((product) => (

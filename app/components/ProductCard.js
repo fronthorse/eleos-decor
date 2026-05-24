@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
 import { useCart } from "../../context/CartContext";
@@ -26,7 +26,7 @@ function hasBalancedArtImage(category) {
   );
 }
 
-export default function ProductCard({
+function ProductCard({
   id,
   image,
   thumbnailImage,
@@ -157,3 +157,5 @@ export default function ProductCard({
     </div>
   );
 }
+
+export default memo(ProductCard);
