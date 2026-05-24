@@ -216,16 +216,18 @@ export function WishlistProvider({ children }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
 
-      if (session?.user) {
-        await mergeGuestWishlistIntoUser(session.user.id);
-        await fetchWishlist(session.user.id);
-      } else {
-        mergedGuestWishlistForUser.current = "";
-        setWishlistState(readGuestWishlist());
-      }
+      window.setTimeout(async () => {
+        if (session?.user) {
+          await mergeGuestWishlistIntoUser(session.user.id);
+          await fetchWishlist(session.user.id);
+        } else {
+          mergedGuestWishlistForUser.current = "";
+          setWishlistState(readGuestWishlist());
+        }
+      }, 0);
     });
 
     return () => subscription.unsubscribe();

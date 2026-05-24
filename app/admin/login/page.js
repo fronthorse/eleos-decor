@@ -2,13 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "../../../lib/supabase/client";
+import {
+  cleanupStaleSupabaseAuthStorage,
+  createClient,
+  getSupabaseAuthStorageSummary,
+} from "../../../lib/supabase/client";
 import {
   logAdminAuthDebug,
   verifyAdminSession,
 } from "../../../lib/adminSession";
 
-const ADMIN_LOGIN_INITIAL_CHECK_MAX_MS = 6000;
 const ADMIN_STORAGE_KEYS = [
   "adminAuthError",
   "adminUploadError",
@@ -34,60 +37,14 @@ function logLoginAuthStorage(stage) {
     return;
   }
 
-  const supabase = createClient();
-  const configuredStorageKey = supabase?.auth?.storageKey || "";
-  let authStorageKeys = [];
-  let storedAuthKeySummaries = [];
-
-  try {
-    authStorageKeys = Object.keys(window.localStorage).filter((key) => {
-      const normalizedKey = key.toLowerCase();
-
-      return (
-        normalizedKey.includes("supabase") ||
-        normalizedKey.includes("auth") ||
-        normalizedKey.startsWith("sb-")
-      );
-    });
-    storedAuthKeySummaries = authStorageKeys.map((key) => {
-      const summary = {
-        key,
-        parseable: false,
-        hasAccessToken: false,
-        hasRefreshToken: false,
-        hasCurrentSession: false,
-        userEmail: "",
-      };
-
-      try {
-        const rawValue = window.localStorage.getItem(key);
-        const parsedValue = rawValue ? JSON.parse(rawValue) : null;
-        const currentSession = parsedValue?.currentSession || parsedValue;
-        const user = parsedValue?.user || currentSession?.user || null;
-
-        summary.parseable = Boolean(parsedValue);
-        summary.hasAccessToken = Boolean(currentSession?.access_token);
-        summary.hasRefreshToken = Boolean(currentSession?.refresh_token);
-        summary.hasCurrentSession = Boolean(parsedValue?.currentSession);
-        summary.userEmail = user?.email || "";
-      } catch {
-        summary.parseable = false;
-      }
-
-      return summary;
-    });
-  } catch {
-    authStorageKeys = ["localStorage-unavailable"];
-    storedAuthKeySummaries = [];
-  }
+  const summary = getSupabaseAuthStorageSummary();
 
   logAdminAuthDebug(stage, {
-    configuredStorageKey,
-    authStorageKeys,
-    hasConfiguredStorageKey: configuredStorageKey
-      ? authStorageKeys.includes(configuredStorageKey)
-      : false,
-    storedAuthKeySummaries,
+    activeStorageKey: summary.activeStorageKey,
+    authStorageKeys: summary.authStorageKeys,
+    staleAuthStorageKeys: summary.staleAuthStorageKeys,
+    hasActiveStorageKey: summary.hasActiveStorageKey,
+    storedAuthKeySummaries: summary.storedAuthKeySummaries,
   });
 }
 
@@ -99,70 +56,27 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    let timedOut = false;
     clearAdminTransientState();
+    cleanupStaleSupabaseAuthStorage(supabase.auth.storageKey);
+    logLoginAuthStorage("login auth storage after init cleanup");
 
-    const checkTimeoutId = window.setTimeout(() => {
-      timedOut = true;
-      setIsCheckingSession(false);
-    }, ADMIN_LOGIN_INITIAL_CHECK_MAX_MS);
-
-    async function checkExistingSession() {
-      try {
-        const {
-          user,
-          error,
-          status,
-        } = await verifyAdminSession(supabase, {
-          source: "admin-login-existing-session",
-          isCancelled: () => cancelled || timedOut,
-        });
-
-        if (cancelled || timedOut) {
-          return;
-        }
-
-        if (status === "ok" && user) {
-          setIsRedirecting(true);
-          router.replace("/admin");
-          return;
-        }
-
-        if (
-          status === "no_session" ||
-          status === "retryable" ||
-          status === "cancelled"
-        ) {
-          return;
-        }
-
-        if (status === "invalid_session" || status === "not_admin") {
-          await supabase.auth.signOut();
-          clearAdminTransientState();
-          setMessage(
-            error?.message ||
-              "Admin login required. Please sign in with an admin account."
-          );
-        }
-      } finally {
-        if (!cancelled && !timedOut) {
-          setIsCheckingSession(false);
-        }
-      }
-    }
-
-    checkExistingSession();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      logAdminAuthDebug("login auth event received", {
+        event,
+        hasSession: Boolean(session),
+        email: session?.user?.email || "",
+      });
+    });
 
     return () => {
-      cancelled = true;
-      window.clearTimeout(checkTimeoutId);
+      subscription.unsubscribe();
     };
-  }, [router, supabase]);
+  }, [supabase]);
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -176,11 +90,20 @@ export default function AdminLoginPage() {
     clearAdminTransientState();
     setMessage("Logging in...");
     logAdminAuthDebug("login started", { email });
+    cleanupStaleSupabaseAuthStorage(supabase.auth.storageKey);
+    logLoginAuthStorage("login auth storage before signInWithPassword");
 
     try {
+      logAdminAuthDebug("before signInWithPassword", { email });
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
+      });
+      logAdminAuthDebug("after signInWithPassword resolves", {
+        hasUser: Boolean(data?.user),
+        email: data?.user?.email || "",
+        hasSession: Boolean(data?.session),
+        errorMessage: error?.message || "",
       });
 
       if (error) {
@@ -220,6 +143,9 @@ export default function AdminLoginPage() {
       router.replace("/admin");
       router.refresh();
     } catch (error) {
+      logAdminAuthDebug("signInWithPassword catch block", {
+        reason: error.message,
+      });
       logAdminAuthDebug("login failure", { reason: error.message });
       setMessage(error.message || "Login failed. Please try again.");
     } finally {

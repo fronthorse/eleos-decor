@@ -219,8 +219,6 @@ export default function AdminPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const authCheckIdRef = useRef(0);
-  const isVerifyingRef = useRef(false);
-  const verificationPromiseRef = useRef(null);
   const loggingOutRef = useRef(false);
   const adminVerifiedRef = useRef(false);
 
@@ -311,20 +309,30 @@ export default function AdminPage() {
   }, []);
 
   const verifyAdminSession = useCallback(async () => {
-    if (isVerifyingRef.current && verificationPromiseRef.current) {
-      logAdminAuthDebug("admin check already running");
-      return verificationPromiseRef.current;
-    }
-
-    isVerifyingRef.current = true;
-    verificationPromiseRef.current = runVerifyAdminSession(supabase, {
-      source: "admin-page",
-    }).finally(() => {
-      isVerifyingRef.current = false;
-      verificationPromiseRef.current = null;
+    logAdminAuthDebug("verifyAdminSession entered", {
+      source: "admin-page-wrapper",
+    });
+    logAdminAuthDebug("returning cached promise?", {
+      source: "admin-page-wrapper",
+      returningCachedPromise: false,
+    });
+    logAdminAuthDebug("creating new verification promise", {
+      source: "admin-page-wrapper",
     });
 
-    return verificationPromiseRef.current;
+    try {
+      return await runVerifyAdminSession(supabase, {
+        source: "admin-page",
+      });
+    } finally {
+      logAdminAuthDebug("verification finally cleanup", {
+        source: "admin-page-wrapper",
+      });
+      logAdminAuthDebug("clearing verification refs", {
+        source: "admin-page-wrapper",
+        hadVerificationRefs: false,
+      });
+    }
   }, [supabase]);
 
   const checkAdminSession = useCallback(async () => {
@@ -455,10 +463,9 @@ export default function AdminPage() {
       return undefined;
     }
 
-    if (adminVerifiedRef.current || isVerifyingRef.current) {
-      logAdminAuthDebug("hydrated auth verification already satisfied/running", {
+    if (adminVerifiedRef.current) {
+      logAdminAuthDebug("hydrated auth verification already satisfied", {
         adminVerified: adminVerifiedRef.current,
-        isVerifying: isVerifyingRef.current,
       });
       return undefined;
     }
