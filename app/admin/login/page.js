@@ -3,13 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
-import { withTimeout } from "../../../lib/supabase/auth";
 import {
   logAdminAuthDebug,
   verifyAdminSession,
 } from "../../../lib/adminSession";
 
-const ADMIN_LOGIN_TIMEOUT_MS = 20000;
 const ADMIN_LOGIN_INITIAL_CHECK_MAX_MS = 6000;
 const ADMIN_STORAGE_KEYS = [
   "adminAuthError",
@@ -180,14 +178,10 @@ export default function AdminLoginPage() {
     logAdminAuthDebug("login started", { email });
 
     try {
-      const { data, error } = await withTimeout(
-        supabase.auth.signInWithPassword({
-          email,
-          password,
-        }),
-        ADMIN_LOGIN_TIMEOUT_MS,
-        "Login is taking too long. Please try again."
-      );
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
       if (error) {
         throw error;
