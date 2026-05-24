@@ -38,6 +38,7 @@ export default function Navbar() {
   const { wishlistCount } = useWishlist();
   const [cartOpen, setCartOpen] = useState(false);
   const [user, setUser] = useState(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [megaMenuOpen, setMegaMenuOpen] = useState(false);
   const [mobileShopOpen, setMobileShopOpen] = useState(false);
   const [featuredProducts, setFeaturedProducts] = useState([
@@ -130,12 +131,7 @@ export default function Navbar() {
   function closeNavigationMenus() {
     setMegaMenuOpen(false);
     setMobileShopOpen(false);
-
-    const navbarCollapse = document.getElementById("navbarNav");
-
-    if (navbarCollapse?.classList.contains("show")) {
-      navbarCollapse.classList.remove("show");
-    }
+    setMobileNavOpen(false);
   }
 
   function handleMegaMenuBlur(event) {
@@ -233,17 +229,21 @@ export default function Navbar() {
             <button
               className="navbar-toggler"
               type="button"
-              data-bs-toggle="collapse"
-              data-bs-target="#navbarNav"
               aria-controls="navbarNav"
-              aria-expanded="false"
+              aria-expanded={mobileNavOpen}
               aria-label="Toggle navigation"
+              onClick={() => setMobileNavOpen((isOpen) => !isOpen)}
             >
               <span className="navbar-toggler-icon"></span>
             </button>
           </div>
 
-          <div className="collapse navbar-collapse order-lg-1" id="navbarNav">
+          <div
+            className={`collapse navbar-collapse order-lg-1 ${
+              mobileNavOpen ? "show" : ""
+            }`}
+            id="navbarNav"
+          >
             <ul className="navbar-nav ms-lg-auto align-items-lg-center gap-lg-3 mt-3 mt-lg-0">
               <li className="nav-item">
                 <Link className="nav-link" href="/" onClick={closeNavigationMenus}>
