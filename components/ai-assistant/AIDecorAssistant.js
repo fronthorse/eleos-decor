@@ -361,7 +361,7 @@ export default function AIDecorAssistant() {
         setIsThinking(false);
       }, 180);
     } catch (error) {
-      console.warn("Unable to build AI assistant reply.", error);
+      console.error("Unable to build AI assistant reply.", error);
       window.setTimeout(() => {
         if (conversationVersionRef.current !== conversationVersion) {
           return;

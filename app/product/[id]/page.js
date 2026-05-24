@@ -124,7 +124,7 @@ async function getCompleteLookProducts(supabase, product) {
     .limit(12);
 
   if (error) {
-    console.warn("Unable to fetch complete-the-look products.", error.message);
+    console.error("Unable to fetch complete-the-look products.", error.message);
     return [];
   }
 
@@ -160,7 +160,7 @@ async function getProductReviewsForSchema(supabase, productId) {
     .limit(20);
 
   if (error) {
-    console.warn("Unable to fetch product reviews for JSON-LD.", error.message);
+    console.error("Unable to fetch product reviews for JSON-LD.", error.message);
     return [];
   }
 
@@ -183,7 +183,7 @@ async function getProductVariants(supabase, product) {
     .order("created_at", { ascending: true });
 
   if (error) {
-    console.warn("Unable to fetch product variants.", error.message);
+    console.error("Unable to fetch product variants.", error.message);
     return [];
   }
 

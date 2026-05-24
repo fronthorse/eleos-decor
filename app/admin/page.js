@@ -6,10 +6,7 @@ import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
 import { isAdminEmail } from "../../lib/adminAuth";
 import { withTimeout } from "../../lib/supabase/auth";
-import {
-  logAdminAuthDebug,
-  verifyAdminSession as runVerifyAdminSession,
-} from "../../lib/adminSession";
+import { verifyAdminSession as runVerifyAdminSession } from "../../lib/adminSession";
 import {
   formatOrderStatus,
   getOrderStatusDescription,
@@ -155,14 +152,6 @@ function getTusErrorMessage(error) {
     .join(": ");
 }
 
-function logUploadDebug(stage, details = {}) {
-  if (process.env.NODE_ENV !== "development") {
-    return;
-  }
-
-  console.info("[admin upload]", stage, details);
-}
-
 function clearAdminStoredState() {
   if (typeof window === "undefined") {
     return;
@@ -277,12 +266,6 @@ export default function AdminPage() {
   const [existingVariants, setExistingVariants] = useState([]);
   const [editingProductId, setEditingProductId] = useState(null);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
-  const [adminAccessTokenAvailable, setAdminAccessTokenAvailable] =
-    useState(false);
-  const [uploadDebug, setUploadDebug] = useState({
-    tusEndpointStatus: "idle",
-    tusUploadStatus: "idle",
-  });
   const [uploadProgress, setUploadProgress] = useState({
     active: false,
     label: "",
@@ -304,40 +287,12 @@ export default function AdminPage() {
     adminVerifiedRef.current = adminVerified;
   }, [adminVerified]);
 
-  const storeAdminAccessToken = useCallback((accessToken = "") => {
-    setAdminAccessTokenAvailable(Boolean(accessToken));
-  }, []);
-
   const clearAdminSessionState = useCallback(() => {
-    setAdminAccessTokenAvailable(false);
     clearAdminStoredState();
   }, []);
 
   const verifyAdminSession = useCallback(async () => {
-    logAdminAuthDebug("verifyAdminSession entered", {
-      source: "admin-page-wrapper",
-    });
-    logAdminAuthDebug("returning cached promise?", {
-      source: "admin-page-wrapper",
-      returningCachedPromise: false,
-    });
-    logAdminAuthDebug("creating new verification promise", {
-      source: "admin-page-wrapper",
-    });
-
-    try {
-      return await runVerifyAdminSession(supabase, {
-        source: "admin-page",
-      });
-    } finally {
-      logAdminAuthDebug("verification finally cleanup", {
-        source: "admin-page-wrapper",
-      });
-      logAdminAuthDebug("clearing verification refs", {
-        source: "admin-page-wrapper",
-        hadVerificationRefs: false,
-      });
-    }
+    return runVerifyAdminSession(supabase);
   }, [supabase]);
 
   const checkAdminSession = useCallback(async () => {
@@ -345,7 +300,6 @@ export default function AdminPage() {
     authCheckIdRef.current = authCheckId;
     let safetyTimeoutId;
 
-    logAdminAuthDebug("dashboard verification started", { authCheckId });
     setCheckingAuth(true);
     setAuthError("");
 
@@ -354,10 +308,6 @@ export default function AdminPage() {
         return;
       }
 
-      logAdminAuthDebug("setting authError", {
-        authCheckId,
-        reason: "dashboard_verification_safety_timeout",
-      });
       setCheckingAuth(false);
       setAuthError(
         "Admin session verification is taking too long. Please retry or log in again."
@@ -372,15 +322,7 @@ export default function AdminPage() {
         status,
       } = await verifyAdminSession();
 
-      logAdminAuthDebug("dashboard verification returned", {
-        authCheckId,
-        status,
-        hasUser: Boolean(verifiedUser),
-        errorMessage: error?.message || "",
-      });
-
       if (authCheckId !== authCheckIdRef.current) {
-        logAdminAuthDebug("stale verification ignored", { authCheckId });
         return;
       }
 
@@ -393,39 +335,23 @@ export default function AdminPage() {
           await supabase.auth.signOut();
         }
 
-        logAdminAuthDebug("setting authError", {
-          authCheckId,
-          status,
-          message:
-            error?.message || "Please log in to access the admin portal.",
-        });
         setAuthError(
           error?.message || "Please log in to access the admin portal."
         );
         return;
       }
 
-      storeAdminAccessToken(session?.access_token || "");
       setUser(verifiedUser);
-      logAdminAuthDebug("setting adminVerified true", {
-        authCheckId,
-        email: verifiedUser.email || "",
-      });
       setAdminVerified(true);
       setAuthError("");
     } catch (error) {
       if (authCheckId !== authCheckIdRef.current) {
-        logAdminAuthDebug("stale verification ignored", { authCheckId });
         return;
       }
 
       setUser(null);
       setAdminVerified(false);
       clearAdminSessionState();
-      logAdminAuthDebug("setting authError", {
-        authCheckId,
-        message: error.message || "Unable to verify admin access.",
-      });
       setAuthError(error.message || "Unable to verify admin access.");
       toast.error(error.message || "Unable to verify admin access.");
     } finally {
@@ -434,19 +360,11 @@ export default function AdminPage() {
       }
 
       if (authCheckId === authCheckIdRef.current) {
-        logAdminAuthDebug("verification finally clearing loading", {
-          authCheckId,
-        });
         setCheckingAuth(false);
-      } else {
-        logAdminAuthDebug("stale verification finally ignored", {
-          authCheckId,
-        });
       }
     }
   }, [
     clearAdminSessionState,
-    storeAdminAccessToken,
     supabase.auth,
     verifyAdminSession,
   ]);
@@ -457,9 +375,6 @@ export default function AdminPage() {
     }
 
     if (!hydratedSessionUser) {
-      logAdminAuthDebug("auth hydration completed without user", {
-        authHydrated,
-      });
       setUser(null);
       setAdminVerified(false);
       clearAdminSessionState();
@@ -469,15 +384,9 @@ export default function AdminPage() {
     }
 
     if (adminVerifiedRef.current) {
-      logAdminAuthDebug("hydrated auth verification already satisfied", {
-        adminVerified: adminVerifiedRef.current,
-      });
       return undefined;
     }
 
-    logAdminAuthDebug("auth hydration ready; starting admin verification", {
-      email: hydratedSessionUser.email || "",
-    });
     checkAdminSession();
 
     return undefined;
@@ -498,9 +407,6 @@ export default function AdminPage() {
         return;
       }
 
-      logAdminAuthDebug("setting authError", {
-        reason: "auth_hydration_timeout",
-      });
       setCheckingAuth(false);
       setAuthError(
         "Admin session is still loading. Please retry or log in again."
@@ -514,12 +420,6 @@ export default function AdminPage() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      logAdminAuthDebug("dashboard auth event", {
-        event,
-        hasSession: Boolean(session),
-        email: session?.user?.email || "",
-      });
-
       if (loggingOutRef.current) {
         return;
       }
@@ -549,7 +449,6 @@ export default function AdminPage() {
         return;
       }
 
-      storeAdminAccessToken(session?.access_token || "");
       setUser(session.user);
       setAuthError("");
     });
@@ -558,7 +457,6 @@ export default function AdminPage() {
   }, [
     adminVerified,
     clearAdminSessionState,
-    storeAdminAccessToken,
     supabase.auth,
   ]);
 
@@ -606,7 +504,6 @@ export default function AdminPage() {
   }, [inquiryPage, inquiryTotalPages]);
 
   async function handleLogout() {
-    logAdminAuthDebug("logout started", { email: user?.email });
     loggingOutRef.current = true;
     authCheckIdRef.current += 1;
     setUser(null);
@@ -625,7 +522,6 @@ export default function AdminPage() {
       toast.error(error.message || "Unable to sign out cleanly.");
     } finally {
       clearAdminSessionState();
-      logAdminAuthDebug("logout completed");
       router.replace("/admin/login");
     }
   }
@@ -863,8 +759,6 @@ export default function AdminPage() {
     if (session?.access_token && verifiedUser) {
       setUser(verifiedUser);
       setAdminVerified(true);
-      storeAdminAccessToken(session.access_token);
-      setAdminAccessTokenAvailable(true);
       return session.access_token;
     }
 
@@ -886,12 +780,6 @@ export default function AdminPage() {
     imageTotal,
     label,
   }) {
-    setUploadDebug((current) => ({
-      ...current,
-      tusEndpointStatus: SUPABASE_TUS_ENDPOINT,
-      tusUploadStatus: "starting",
-    }));
-
     return new Promise((resolve, reject) => {
       const upload = new tus.Upload(file, {
         endpoint: SUPABASE_TUS_ENDPOINT,
@@ -913,11 +801,6 @@ export default function AdminPage() {
         onError(error) {
           const message = getTusErrorMessage(error);
 
-          setUploadDebug((current) => ({
-            ...current,
-            tusUploadStatus: `failed: ${message}`,
-          }));
-
           reject(
             createUploadError(
               `Supabase resumable upload failed: ${message}`,
@@ -931,12 +814,6 @@ export default function AdminPage() {
               ? Math.round((bytesUploaded / bytesTotal) * 100)
               : null;
 
-          setUploadDebug((current) => ({
-            ...current,
-            tusUploadStatus:
-              percent === null ? "uploading" : `uploading ${percent}%`,
-          }));
-
           setUploadProgress({
             active: true,
             label: `${label}: uploading image ${imageNumber} of ${imageTotal}`,
@@ -946,11 +823,6 @@ export default function AdminPage() {
           });
         },
         onSuccess() {
-          setUploadDebug((current) => ({
-            ...current,
-            tusUploadStatus: "success",
-          }));
-
           resolve({
             bucket: PRODUCTS_STORAGE_BUCKET,
             path,
@@ -970,11 +842,6 @@ export default function AdminPage() {
         })
         .catch((error) => {
           const message = getTusErrorMessage(error);
-
-          setUploadDebug((current) => ({
-            ...current,
-            tusUploadStatus: `failed: ${message}`,
-          }));
 
           reject(
             createUploadError(
@@ -1043,12 +910,6 @@ export default function AdminPage() {
     const selectedFiles = Array.from(files || []);
     const fileList = getImageFilesFromInput(selectedFiles);
 
-    logUploadDebug("upload batch received", {
-      label,
-      selectedFiles: selectedFiles.length,
-      validImageFiles: fileList.length,
-    });
-
     if (selectedFiles.length === 0) {
       return uploadedImageUrls;
     }
@@ -1086,43 +947,15 @@ export default function AdminPage() {
       let uploadFile = file;
       const fileSizeInMb = getFileSizeInMb(file);
 
-      logUploadDebug("image selected", {
-        label,
-        image: `${current} of ${fileList.length}`,
-        fileName: file.name || "(unnamed)",
-        fileType: file.type || "(empty)",
-        inferredContentType: originalContentType,
-        fileSize: file.size,
-        fileSizeMb: fileSizeInMb.toFixed(3),
-      });
-
       if (fileSizeInMb > SMALL_IMAGE_SKIP_COMPRESSION_MB) {
         try {
-          logUploadDebug("compression started", {
-            image: `${current} of ${fileList.length}`,
-            fileName: file.name || "(unnamed)",
-          });
-
           uploadFile = await withTimeout(
             imageCompression(file, PRODUCT_IMAGE_COMPRESSION_OPTIONS),
             IMAGE_COMPRESSION_TIMEOUT_MS,
             `Image ${current} optimization timed out. Uploading the original image instead.`
           );
 
-          logUploadDebug("compression completed", {
-            image: `${current} of ${fileList.length}`,
-            fileName: uploadFile.name || file.name || "(unnamed)",
-            fileType: uploadFile.type || "(empty)",
-            fileSize: uploadFile.size || file.size,
-          });
         } catch (error) {
-          logUploadDebug("image compression failed; using original file", {
-            label,
-            fileName: file.name,
-            fileSize: file.size,
-            error,
-          });
-
           if (fileSizeInMb > MAX_ORIGINAL_UPLOAD_SIZE_MB) {
             const reason = isTimeoutError(error)
               ? "Image optimization timed out"
@@ -1134,17 +967,7 @@ export default function AdminPage() {
             );
           }
 
-          logUploadDebug("compression fallback to original", {
-            image: `${current} of ${fileList.length}`,
-            reason: error.message || "Compression failed",
-            originalSize: file.size,
-          });
         }
-      } else {
-        logUploadDebug("compression skipped for small image", {
-          image: `${current} of ${fileList.length}`,
-          fileSize: file.size,
-        });
       }
 
       const uploadContentType = getImageContentType(uploadFile);
@@ -1167,14 +990,6 @@ export default function AdminPage() {
         percent: 0,
       });
 
-      logUploadDebug("tus storage upload started", {
-        bucket: PRODUCTS_STORAGE_BUCKET,
-        path,
-        uploadType: currentUploadType,
-        contentType: uploadContentType,
-        fileSize: uploadFile.size || file.size,
-      });
-
       const uploadDetails = await uploadFileWithTus({
         accessToken,
         file: uploadFile,
@@ -1188,7 +1003,6 @@ export default function AdminPage() {
 
       uploadedImageUrls.push(uploadDetails.publicUrl);
       setUploadStage(`${label}: image ${current} uploaded`, 100);
-      logUploadDebug("upload completed", uploadDetails);
     }
 
     return uploadedImageUrls;
@@ -1394,10 +1208,6 @@ export default function AdminPage() {
     }
 
     setIsSavingProduct(true);
-    setUploadDebug({
-      tusEndpointStatus: "idle",
-      tusUploadStatus: "idle",
-    });
 
     try {
       if (editingProductId) {
@@ -2119,13 +1929,6 @@ export default function AdminPage() {
             )}
 
             <div className="admin-form-actions">
-              <p className="text-muted small mb-2">
-                Upload debug: token exists:{" "}
-                {adminAccessTokenAvailable ? "yes" : "no"} | TUS endpoint:{" "}
-                {uploadDebug.tusEndpointStatus} | TUS upload:{" "}
-                {uploadDebug.tusUploadStatus}
-              </p>
-
               {uploadProgress.active && (
                 <div
                   className="admin-upload-progress"

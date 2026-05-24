@@ -75,7 +75,7 @@ function readGuestWishlist() {
 
     return parsedWishlist.map(normalizeWishlistItem).filter(Boolean);
   } catch (error) {
-    console.warn("Unable to read guest wishlist.", error);
+    console.error("Unable to read guest wishlist.", error);
     return [];
   }
 }
@@ -88,7 +88,7 @@ function writeGuestWishlist(items) {
   try {
     window.localStorage.setItem(GUEST_WISHLIST_KEY, JSON.stringify(items));
   } catch (error) {
-    console.warn("Unable to save guest wishlist.", error);
+    console.error("Unable to save guest wishlist.", error);
   }
 }
 
@@ -122,7 +122,7 @@ export function WishlistProvider({ children }) {
       .eq("user_id", userId);
 
     if (error) {
-      console.warn("Unable to fetch wishlist.", error.message);
+      console.error("Unable to fetch wishlist.", error.message);
       return;
     }
 
@@ -139,7 +139,7 @@ export function WishlistProvider({ children }) {
       .in("id", productIds);
 
     if (productsError) {
-      console.warn("Unable to fetch wishlist products.", productsError.message);
+      console.error("Unable to fetch wishlist products.", productsError.message);
       setWishlistState(productIds);
       return;
     }
@@ -170,7 +170,7 @@ export function WishlistProvider({ children }) {
       .eq("user_id", userId);
 
     if (error) {
-      console.warn("Unable to prepare wishlist merge.", error.message);
+      console.error("Unable to prepare wishlist merge.", error.message);
       return false;
     }
 
@@ -188,7 +188,7 @@ export function WishlistProvider({ children }) {
       );
 
       if (insertError) {
-        console.warn("Unable to merge guest wishlist.", insertError.message);
+        console.error("Unable to merge guest wishlist.", insertError.message);
         return false;
       }
     }

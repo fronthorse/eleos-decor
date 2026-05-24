@@ -241,8 +241,6 @@ function ShopContent() {
 
   const fetchProducts = useCallback(async () => {
     const fetchId = fetchIdRef.current + 1;
-    const startedAt =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
     fetchIdRef.current = fetchId;
     setLoading(true);
     setLoadError("");
@@ -267,8 +265,8 @@ function ShopContent() {
         setLoading(false);
         return;
       }
-    } catch (error) {
-      console.warn("Curated shop filter failed; using category fallback.", error);
+    } catch {
+      // Fall through to the standard public product query.
     }
 
     if (cleanSearch || sortParam === "price-low" || sortParam === "price-high") {
@@ -310,8 +308,8 @@ function ShopContent() {
         setTotalCount(searchCount);
         setLoading(false);
         return;
-      } catch (error) {
-        console.warn("Shop RPC query failed; using fallback.", error);
+      } catch {
+        // Fall through to the standard public product query.
       }
     }
 
@@ -356,16 +354,6 @@ function ShopContent() {
       );
     } finally {
       if (fetchId === fetchIdRef.current) {
-        const endedAt =
-          typeof performance !== "undefined" ? performance.now() : Date.now();
-        console.info("[shop products] load completed", {
-          fetchId,
-          page: pageParam,
-          category: categoryParam,
-          hasSearch: Boolean(cleanSearch),
-          sort: sortParam,
-          durationMs: Math.round(endedAt - startedAt),
-        });
         setLoading(false);
       }
     }

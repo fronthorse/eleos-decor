@@ -27,7 +27,7 @@ function safeParse(value, fallback) {
   try {
     return JSON.parse(value);
   } catch (error) {
-    console.warn("Unable to parse saved AI chat data.", error);
+    console.error("Unable to parse saved AI chat data.", error);
     return fallback;
   }
 }
@@ -214,7 +214,7 @@ export function useAIDecorChatPersistence({
         .maybeSingle();
 
       if (error) {
-        console.warn("Unable to load saved AI chat session.", error.message);
+        console.error("Unable to load saved AI chat session.", error.message);
         return null;
       }
 
@@ -244,7 +244,7 @@ export function useAIDecorChatPersistence({
           .maybeSingle();
 
         if (error) {
-          console.warn("Unable to update saved AI chat session.", error.message);
+          console.error("Unable to update saved AI chat session.", error.message);
           return null;
         }
 
@@ -259,7 +259,7 @@ export function useAIDecorChatPersistence({
         .maybeSingle();
 
       if (loadError) {
-        console.warn("Unable to check saved AI chat session.", loadError.message);
+        console.error("Unable to check saved AI chat session.", loadError.message);
         return null;
       }
 
@@ -274,7 +274,7 @@ export function useAIDecorChatPersistence({
           .maybeSingle();
 
         if (error) {
-          console.warn("Unable to save AI chat session.", error.message);
+          console.error("Unable to save AI chat session.", error.message);
           return null;
         }
 
@@ -289,7 +289,7 @@ export function useAIDecorChatPersistence({
 
       if (error) {
         if (error.code !== "23505") {
-          console.warn("Unable to save AI chat session.", error.message);
+          console.error("Unable to save AI chat session.", error.message);
           return null;
         }
 
@@ -303,7 +303,7 @@ export function useAIDecorChatPersistence({
 
         if (conflictLoadError || !conflictedSession?.id) {
           if (conflictLoadError) {
-            console.warn(
+            console.error(
               "Unable to recover AI chat session save.",
               conflictLoadError.message
             );
@@ -322,7 +322,7 @@ export function useAIDecorChatPersistence({
           .maybeSingle();
 
         if (recoverError) {
-          console.warn("Unable to save AI chat session.", recoverError.message);
+          console.error("Unable to save AI chat session.", recoverError.message);
           return null;
         }
 
