@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { absoluteUrl } from "../lib/seo";
+import { SITE_URL } from "../lib/seo";
 import {
   getCuratedFilterHref,
   SHOP_SPACE_FILTERS,
@@ -7,6 +7,25 @@ import {
 } from "../lib/shopCuration";
 
 export const revalidate = 3600;
+
+function escapeXml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function sitemapUrl(path, configureUrl) {
+  const url = new URL(path, SITE_URL);
+
+  if (typeof configureUrl === "function") {
+    configureUrl(url);
+  }
+
+  return escapeXml(url.toString());
+}
 
 function getPublicSupabaseClient() {
   return createClient(
@@ -17,7 +36,7 @@ function getPublicSupabaseClient() {
 
 function route(path, options = {}) {
   return {
-    url: absoluteUrl(path),
+    url: path instanceof URL ? escapeXml(path.toString()) : sitemapUrl(path),
     lastModified: options.lastModified || new Date(),
     changeFrequency: options.changeFrequency || "weekly",
     priority: options.priority || 0.7,
@@ -80,12 +99,17 @@ export default async function sitemap() {
       ),
     ];
 
-    const categoryRoutes = categories.map((category) =>
-      route(`/shop?category=${encodeURIComponent(category)}`, {
+    const categoryRoutes = categories.map((category) => {
+      const categoryUrl = new URL("/shop", SITE_URL);
+      const encodedCategory = encodeURIComponent(category);
+
+      categoryUrl.searchParams.set("category", decodeURIComponent(encodedCategory));
+
+      return route(categoryUrl, {
         changeFrequency: "weekly",
         priority: 0.75,
-      })
-    );
+      });
+    });
 
     const roomRoutes = SHOP_SPACE_FILTERS.map((space) =>
       route(getCuratedFilterHref("space", space.slug), {
