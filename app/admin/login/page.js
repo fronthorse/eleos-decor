@@ -10,6 +10,7 @@ import {
 } from "../../../lib/adminSession";
 
 const ADMIN_LOGIN_TIMEOUT_MS = 20000;
+const ADMIN_LOGIN_INITIAL_CHECK_MAX_MS = 6000;
 const ADMIN_STORAGE_KEYS = [
   "admin_access_token",
   "adminAuthError",
@@ -40,10 +41,17 @@ export default function AdminLoginPage() {
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    let timedOut = false;
     clearAdminTransientState();
+
+    const checkTimeoutId = window.setTimeout(() => {
+      timedOut = true;
+      setIsCheckingSession(false);
+    }, ADMIN_LOGIN_INITIAL_CHECK_MAX_MS);
 
     async function checkExistingSession() {
       try {
@@ -53,19 +61,24 @@ export default function AdminLoginPage() {
           status,
         } = await verifyAdminSession(supabase, {
           source: "admin-login-existing-session",
-          isCancelled: () => cancelled,
+          isCancelled: () => cancelled || timedOut,
         });
 
-        if (cancelled) {
+        if (cancelled || timedOut) {
           return;
         }
 
         if (status === "ok" && user) {
+          setIsRedirecting(true);
           router.replace("/admin");
           return;
         }
 
-        if (status === "no_session" || status === "retryable") {
+        if (
+          status === "no_session" ||
+          status === "retryable" ||
+          status === "cancelled"
+        ) {
           return;
         }
 
@@ -78,7 +91,7 @@ export default function AdminLoginPage() {
           );
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && !timedOut) {
           setIsCheckingSession(false);
         }
       }
@@ -88,12 +101,13 @@ export default function AdminLoginPage() {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(checkTimeoutId);
     };
   }, [router, supabase]);
 
   async function handleLogin(e) {
     e.preventDefault();
-    if (isSubmitting || isCheckingSession) {
+    if (isSubmitting || isRedirecting) {
       return;
     }
 
@@ -171,7 +185,7 @@ export default function AdminLoginPage() {
             className="form-control"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            disabled={isSubmitting || isCheckingSession}
+            disabled={isSubmitting || isRedirecting}
             required
           />
         </div>
@@ -184,19 +198,19 @@ export default function AdminLoginPage() {
             className="form-control"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            disabled={isSubmitting || isCheckingSession}
+            disabled={isSubmitting || isRedirecting}
             required
           />
         </div>
 
         <button
           className="btn btn-dark w-100"
-          disabled={isSubmitting || isCheckingSession}
+          disabled={isSubmitting || isRedirecting}
         >
-          {isCheckingSession
+          {isRedirecting
             ? "Checking session..."
             : isSubmitting
-            ? "Verifying..."
+            ? "Signing in..."
             : "Login"}
         </button>
 
