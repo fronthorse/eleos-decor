@@ -371,7 +371,7 @@ export default function AdminPage() {
         return;
       }
 
-      storeAdminAccessToken(session.access_token || "");
+      storeAdminAccessToken(session?.access_token || "");
       setUser(verifiedUser);
       setAdminVerified(true);
     } catch (error) {
@@ -439,7 +439,7 @@ export default function AdminPage() {
         return;
       }
 
-      storeAdminAccessToken(session.access_token || "");
+      storeAdminAccessToken(session?.access_token || "");
       setUser(session.user);
       setAuthError("");
     });
