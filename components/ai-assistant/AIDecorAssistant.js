@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAIDecorChatPersistence } from "@/hooks/useAIDecorChatPersistence";
 import {
@@ -30,6 +30,8 @@ import AssistantButton from "./AssistantButton";
 import AssistantPanel from "./AssistantPanel";
 
 const DEFAULT_MESSAGES = [WELCOME_MESSAGE];
+const ASSISTANT_BUTTON_MARGIN = 12;
+const ASSISTANT_BUTTON_GAP = 10;
 
 function createAssistantMessage(reply) {
   return {
@@ -41,16 +43,62 @@ function createAssistantMessage(reply) {
 
 export default function AIDecorAssistant() {
   const supabase = useMemo(() => createClient(), []);
+  const buttonRef = useRef(null);
+  const dragStateRef = useRef(null);
   const messagesRef = useRef(null);
   const conversationVersionRef = useRef(0);
   const clearStatusTimerRef = useRef(null);
+  const suppressClickRef = useRef(false);
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState(DEFAULT_MESSAGES);
   const [assistantMemory, setAssistantMemory] = useState(DEFAULT_ASSISTANT_MEMORY);
+  const [buttonPosition, setButtonPosition] = useState(null);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [isClearingChat, setIsClearingChat] = useState(false);
   const [hasJustClearedChat, setHasJustClearedChat] = useState(false);
+
+  const clampButtonPosition = useCallback((left, top) => {
+    if (typeof window === "undefined") {
+      return { left, top };
+    }
+
+    const buttonRect = buttonRef.current?.getBoundingClientRect();
+    const width = buttonRect?.width || 48;
+    const height = buttonRect?.height || 48;
+    const margin = ASSISTANT_BUTTON_MARGIN;
+    const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+    const maxTop = Math.max(margin, window.innerHeight - height - margin);
+    let nextLeft = Math.min(Math.max(left, margin), maxLeft);
+    let nextTop = Math.min(Math.max(top, margin), maxTop);
+    const whatsappRect = document
+      .querySelector(".whatsapp-float")
+      ?.getBoundingClientRect();
+
+    if (whatsappRect) {
+      const overlaps =
+        nextLeft < whatsappRect.right + ASSISTANT_BUTTON_GAP &&
+        nextLeft + width > whatsappRect.left - ASSISTANT_BUTTON_GAP &&
+        nextTop < whatsappRect.bottom + ASSISTANT_BUTTON_GAP &&
+        nextTop + height > whatsappRect.top - ASSISTANT_BUTTON_GAP;
+
+      if (overlaps) {
+        const aboveWhatsApp = whatsappRect.top - height - ASSISTANT_BUTTON_GAP;
+        const besideWhatsApp = whatsappRect.left - width - ASSISTANT_BUTTON_GAP;
+
+        if (aboveWhatsApp >= margin) {
+          nextTop = aboveWhatsApp;
+        } else if (besideWhatsApp >= margin) {
+          nextLeft = besideWhatsApp;
+        }
+      }
+    }
+
+    return {
+      left: Math.min(Math.max(nextLeft, margin), maxLeft),
+      top: Math.min(Math.max(nextTop, margin), maxTop),
+    };
+  }, []);
 
   const { clearPersistedChat } = useAIDecorChatPersistence({
     messages,
@@ -78,6 +126,119 @@ export default function AIDecorAssistant() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!buttonPosition) {
+      return undefined;
+    }
+
+    function handleResize() {
+      setButtonPosition((currentPosition) => {
+        if (!currentPosition) {
+          return currentPosition;
+        }
+
+        return clampButtonPosition(currentPosition.left, currentPosition.top);
+      });
+    }
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+    };
+  }, [buttonPosition, clampButtonPosition]);
+
+  useEffect(() => {
+    return () => {
+      if (dragStateRef.current?.cleanup) {
+        dragStateRef.current.cleanup();
+      }
+    };
+  }, []);
+
+  function handleAssistantPointerDown(event) {
+    if (event.button !== 0 || !buttonRef.current) {
+      return;
+    }
+
+    const buttonRect = buttonRef.current.getBoundingClientRect();
+    const dragState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startLeft: buttonRect.left,
+      startTop: buttonRect.top,
+      didDrag: false,
+      cleanup: null,
+    };
+
+    function handlePointerMove(moveEvent) {
+      if (moveEvent.pointerId !== dragState.pointerId) {
+        return;
+      }
+
+      const deltaX = moveEvent.clientX - dragState.startX;
+      const deltaY = moveEvent.clientY - dragState.startY;
+
+      if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
+        dragState.didDrag = true;
+      }
+
+      if (!dragState.didDrag) {
+        return;
+      }
+
+      moveEvent.preventDefault();
+      setButtonPosition(
+        clampButtonPosition(
+          dragState.startLeft + deltaX,
+          dragState.startTop + deltaY
+        )
+      );
+    }
+
+    function handlePointerUp(upEvent) {
+      if (upEvent.pointerId !== dragState.pointerId) {
+        return;
+      }
+
+      dragState.cleanup?.();
+
+      if (dragState.didDrag) {
+        suppressClickRef.current = true;
+        window.setTimeout(() => {
+          suppressClickRef.current = false;
+        }, 120);
+      }
+
+      dragStateRef.current = null;
+    }
+
+    dragState.cleanup = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+
+    dragStateRef.current = dragState;
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+  }
+
+  function handleAssistantButtonClick(event) {
+    if (suppressClickRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressClickRef.current = false;
+      return;
+    }
+
+    setIsOpen((open) => !open);
+  }
 
   async function buildReply(message) {
     const { memory, extracted } = updateConversationMemory(
@@ -238,8 +399,21 @@ export default function AIDecorAssistant() {
     }
   }
 
+  const widgetStyle = buttonPosition
+    ? {
+        left: `${buttonPosition.left}px`,
+        top: `${buttonPosition.top}px`,
+        right: "auto",
+        bottom: "auto",
+      }
+    : undefined;
+
   return (
-    <div className={`ai-assistant-widget ${isOpen ? "open" : "collapsed"}`}>
+    <div
+      className={`ai-assistant-widget ${isOpen ? "open" : "collapsed"}`}
+      style={widgetStyle}
+      data-dragged={buttonPosition ? "true" : undefined}
+    >
       <AssistantPanel
         isOpen={isOpen}
         messages={messages}
@@ -254,7 +428,12 @@ export default function AIDecorAssistant() {
         onQuickAction={sendMessage}
         messagesRef={messagesRef}
       />
-      <AssistantButton isOpen={isOpen} onClick={() => setIsOpen((open) => !open)} />
+      <AssistantButton
+        ref={buttonRef}
+        isOpen={isOpen}
+        onClick={handleAssistantButtonClick}
+        onPointerDown={handleAssistantPointerDown}
+      />
     </div>
   );
 }
