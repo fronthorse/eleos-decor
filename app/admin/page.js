@@ -221,6 +221,11 @@ export default function AdminPage() {
   const authCheckIdRef = useRef(0);
   const loggingOutRef = useRef(false);
   const adminVerifiedRef = useRef(false);
+  const pendingProductSaveRef = useRef({
+    productImageUrls: null,
+    variantRows: null,
+    productId: null,
+  });
 
   const [user, setUser] = useState(null);
   const [adminVerified, setAdminVerified] = useState(false);
@@ -1291,6 +1296,11 @@ export default function AdminPage() {
 
   function resetForm() {
     setEditingProductId(null);
+    pendingProductSaveRef.current = {
+      productImageUrls: null,
+      variantRows: null,
+      productId: null,
+    };
     setTitle("");
     setCategory("Frames");
     setPrice("");
@@ -1391,6 +1401,11 @@ export default function AdminPage() {
 
     try {
       if (editingProductId) {
+        pendingProductSaveRef.current = {
+          productImageUrls: null,
+          variantRows: null,
+          productId: editingProductId,
+        };
         const updatedProduct = {
           title,
           category,
@@ -1443,23 +1458,36 @@ export default function AdminPage() {
         return;
       }
 
-      const uploadedImageUrls = await uploadImages(imageFiles, "Product images");
-      const variantRows = await prepareProductVariants(null);
+      const pendingSave = pendingProductSaveRef.current;
+      const uploadedImageUrls =
+        pendingSave.productImageUrls ||
+        (await uploadImages(imageFiles, "Product images"));
+      pendingProductSaveRef.current.productImageUrls = uploadedImageUrls;
 
-      setUploadStage("Saving product...");
-      const { productId } = await adminApiRequest("/api/admin/products", {
-        method: "POST",
-        body: JSON.stringify({
-          product: {
-            title,
-            category,
-            price,
-            description,
-            image_url: uploadedImageUrls[0],
-            gallery_images: uploadedImageUrls,
-          },
-        }),
-      });
+      const variantRows =
+        pendingSave.variantRows || (await prepareProductVariants(null));
+      pendingProductSaveRef.current.variantRows = variantRows;
+
+      let productId = pendingProductSaveRef.current.productId;
+
+      if (!productId) {
+        setUploadStage("Saving product...");
+        const result = await adminApiRequest("/api/admin/products", {
+          method: "POST",
+          body: JSON.stringify({
+            product: {
+              title,
+              category,
+              price,
+              description,
+              image_url: uploadedImageUrls[0],
+              gallery_images: uploadedImageUrls,
+            },
+          }),
+        });
+        productId = result.productId;
+        pendingProductSaveRef.current.productId = productId;
+      }
 
       if (variantRows.length > 0) {
         setUploadStage("Saving variants...");
@@ -1479,6 +1507,9 @@ export default function AdminPage() {
       setAnalyticsLoaded(false);
       setActiveTab("products");
     } catch (error) {
+      if (pendingProductSaveRef.current.productId && !editingProductId) {
+        setEditingProductId(pendingProductSaveRef.current.productId);
+      }
       toast.error(error.message);
     } finally {
       setIsSavingProduct(false);

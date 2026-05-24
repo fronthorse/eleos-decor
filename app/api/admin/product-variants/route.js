@@ -43,7 +43,35 @@ export async function POST(request) {
   }
 
   try {
-    if (variantRows.some((variant) => variant.is_default)) {
+    const labels = variantRows.map((variant) => variant.variant_label);
+    const { data: existingVariants, error: existingError } =
+      await withApiTimeout(
+        adminSupabase
+          .from("product_variants")
+          .select("variant_label")
+          .eq("product_id", productId)
+          .in("variant_label", labels),
+        "Timed out while checking existing product variants."
+      );
+
+    if (existingError) {
+      throw new Error(
+        `Variant duplicate check failed: ${existingError.message}`
+      );
+    }
+
+    const existingLabels = new Set(
+      (existingVariants || []).map((variant) => variant.variant_label)
+    );
+    const rowsToInsert = variantRows.filter(
+      (variant) => !existingLabels.has(variant.variant_label)
+    );
+
+    if (rowsToInsert.length === 0) {
+      return Response.json({ saved: 0, skippedExisting: variantRows.length });
+    }
+
+    if (rowsToInsert.some((variant) => variant.is_default)) {
       const { error: defaultError } = await withApiTimeout(
         adminSupabase
           .from("product_variants")
@@ -58,7 +86,7 @@ export async function POST(request) {
     }
 
     const { error } = await withApiTimeout(
-      adminSupabase.from("product_variants").insert(variantRows),
+      adminSupabase.from("product_variants").insert(rowsToInsert),
       "Timed out while saving product variants."
     );
 
@@ -66,7 +94,10 @@ export async function POST(request) {
       throw new Error(`Variant save failed: ${error.message}`);
     }
 
-    return Response.json({ saved: variantRows.length });
+    return Response.json({
+      saved: rowsToInsert.length,
+      skippedExisting: variantRows.length - rowsToInsert.length,
+    });
   } catch (error) {
     return jsonError(error.message || "Unable to save product variants.", 500);
   }

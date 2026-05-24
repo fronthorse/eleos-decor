@@ -49,7 +49,32 @@ async function saveVariants(adminSupabase, productId, variants) {
     return;
   }
 
-  if (rows.some((variant) => variant.is_default)) {
+  const labels = rows.map((variant) => variant.variant_label);
+  const { data: existingVariants, error: existingError } = await withApiTimeout(
+    adminSupabase
+      .from("product_variants")
+      .select("variant_label")
+      .eq("product_id", Number(productId))
+      .in("variant_label", labels),
+    "Timed out while checking existing product variants."
+  );
+
+  if (existingError) {
+    throw new Error(`Variant duplicate check failed: ${existingError.message}`);
+  }
+
+  const existingLabels = new Set(
+    (existingVariants || []).map((variant) => variant.variant_label)
+  );
+  const rowsToInsert = rows.filter(
+    (variant) => !existingLabels.has(variant.variant_label)
+  );
+
+  if (rowsToInsert.length === 0) {
+    return;
+  }
+
+  if (rowsToInsert.some((variant) => variant.is_default)) {
     const { error: defaultError } = await withApiTimeout(
       adminSupabase
         .from("product_variants")
@@ -64,13 +89,40 @@ async function saveVariants(adminSupabase, productId, variants) {
   }
 
   const { error } = await withApiTimeout(
-    adminSupabase.from("product_variants").insert(rows),
+    adminSupabase.from("product_variants").insert(rowsToInsert),
     "Timed out while saving product variants."
   );
 
   if (error) {
     throw new Error(`Variant save failed: ${error.message}`);
   }
+}
+
+async function findExistingProduct(adminSupabase, product) {
+  if (!product?.image_url) {
+    return null;
+  }
+
+  const { data, error } = await withApiTimeout(
+    adminSupabase
+      .from("products")
+      .select("id")
+      .eq("title", product.title)
+      .eq("category", product.category)
+      .eq("price", product.price)
+      .eq("description", product.description)
+      .eq("image_url", product.image_url)
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    "Timed out while checking existing product."
+  );
+
+  if (error) {
+    throw new Error(`Product duplicate check failed: ${error.message}`);
+  }
+
+  return data || null;
 }
 
 async function readJson(request) {
@@ -93,10 +145,21 @@ export async function POST(request) {
   }
 
   try {
+    const product = cleanProductPayload(body.product);
+    const existingProduct = await findExistingProduct(adminSupabase, product);
+
+    if (existingProduct?.id) {
+      await saveVariants(adminSupabase, existingProduct.id, body.variants || []);
+      return Response.json({
+        productId: existingProduct.id,
+        reusedExistingProduct: true,
+      });
+    }
+
     const { data: insertedProduct, error } = await withApiTimeout(
       adminSupabase
         .from("products")
-        .insert([cleanProductPayload(body.product)])
+        .insert([product])
         .select("id")
         .single(),
       "Timed out while saving product."
