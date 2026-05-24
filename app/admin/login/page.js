@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
 import { withTimeout } from "../../../lib/supabase/auth";
-import { SUPABASE_AUTH_STORAGE_KEY } from "../../../lib/supabase/client";
 import {
   logAdminAuthDebug,
   verifyAdminSession,
@@ -37,7 +36,10 @@ function logLoginAuthStorage(stage) {
     return;
   }
 
+  const supabase = createClient();
+  const configuredStorageKey = supabase?.auth?.storageKey || "";
   let authStorageKeys = [];
+  let storedAuthKeySummaries = [];
 
   try {
     authStorageKeys = Object.keys(window.localStorage).filter((key) => {
@@ -49,14 +51,45 @@ function logLoginAuthStorage(stage) {
         normalizedKey.startsWith("sb-")
       );
     });
+    storedAuthKeySummaries = authStorageKeys.map((key) => {
+      const summary = {
+        key,
+        parseable: false,
+        hasAccessToken: false,
+        hasRefreshToken: false,
+        hasCurrentSession: false,
+        userEmail: "",
+      };
+
+      try {
+        const rawValue = window.localStorage.getItem(key);
+        const parsedValue = rawValue ? JSON.parse(rawValue) : null;
+        const currentSession = parsedValue?.currentSession || parsedValue;
+        const user = parsedValue?.user || currentSession?.user || null;
+
+        summary.parseable = Boolean(parsedValue);
+        summary.hasAccessToken = Boolean(currentSession?.access_token);
+        summary.hasRefreshToken = Boolean(currentSession?.refresh_token);
+        summary.hasCurrentSession = Boolean(parsedValue?.currentSession);
+        summary.userEmail = user?.email || "";
+      } catch {
+        summary.parseable = false;
+      }
+
+      return summary;
+    });
   } catch {
     authStorageKeys = ["localStorage-unavailable"];
+    storedAuthKeySummaries = [];
   }
 
   logAdminAuthDebug(stage, {
-    expectedStorageKey: SUPABASE_AUTH_STORAGE_KEY,
+    configuredStorageKey,
     authStorageKeys,
-    hasExpectedStorageKey: authStorageKeys.includes(SUPABASE_AUTH_STORAGE_KEY),
+    hasConfiguredStorageKey: configuredStorageKey
+      ? authStorageKeys.includes(configuredStorageKey)
+      : false,
+    storedAuthKeySummaries,
   });
 }
 
