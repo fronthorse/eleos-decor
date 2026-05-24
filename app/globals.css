@@ -781,11 +781,31 @@ body {
 }
 
 .ai-assistant-product-price {
-  margin-bottom: 8px !important;
+  margin-bottom: 5px !important;
   color: #8b6b3d;
   font-size: 0.8rem !important;
   font-weight: 800;
   line-height: 1.2 !important;
+}
+
+.ai-assistant-product-category,
+.ai-assistant-product-reason {
+  margin-bottom: 5px !important;
+  color: rgba(31, 31, 31, 0.58);
+  font-size: 0.72rem !important;
+  line-height: 1.35 !important;
+}
+
+.ai-assistant-product-category {
+  color: rgba(184, 149, 95, 0.92);
+  font-weight: 800;
+}
+
+.ai-assistant-product-reason {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .ai-assistant-product-button {

@@ -277,8 +277,12 @@ export default function AIDecorAssistant() {
       intent.type === "budget_guidance"
     ) {
       const missingStep = getMissingConsultationStep(memory);
+      const shouldRecommendNow =
+        intent.type === "budget_guidance" ||
+        intent.type === "room_styling" ||
+        (extracted.hasOverrideIntent && (memory.room || memory.budget || memory.style));
 
-      if (missingStep !== "ready") {
+      if (missingStep !== "ready" && !shouldRecommendNow) {
         const nextMemory = {
           ...memory,
           consultation: {

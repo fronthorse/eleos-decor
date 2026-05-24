@@ -22,6 +22,12 @@ export default function ProductSuggestionCard({ product }) {
       <div className="ai-assistant-product-copy">
         <h3 className="ai-assistant-product-title">{product.title}</h3>
         {product.price && <p className="ai-assistant-product-price">{product.price}</p>}
+        {product.category && (
+          <p className="ai-assistant-product-category">{product.category}</p>
+        )}
+        {product.reason && (
+          <p className="ai-assistant-product-reason">{product.reason}</p>
+        )}
         <a href={product.href} className="ai-assistant-product-button">
           View Product
         </a>
