@@ -39,6 +39,7 @@ const MAX_ORIGINAL_UPLOAD_SIZE_MB = 3;
 const SMALL_IMAGE_SKIP_COMPRESSION_MB = 0.75;
 const IMAGE_COMPRESSION_TIMEOUT_MS = 45000;
 const ADMIN_DB_TIMEOUT_MS = 20000;
+const ADMIN_DASHBOARD_AUTH_SAFETY_MS = 12000;
 const PRODUCTS_STORAGE_BUCKET = "products";
 const SUPABASE_STORAGE_HOST = "https://qexvohhfowswnryqugvr.storage.supabase.co";
 const SUPABASE_TUS_ENDPOINT = `${SUPABASE_STORAGE_HOST}/storage/v1/upload/resumable`;
@@ -224,6 +225,7 @@ export default function AdminPage() {
   const isVerifyingRef = useRef(false);
   const verificationPromiseRef = useRef(null);
   const loggingOutRef = useRef(false);
+  const adminVerifiedRef = useRef(false);
 
   const [user, setUser] = useState(null);
   const [adminVerified, setAdminVerified] = useState(false);
@@ -296,6 +298,10 @@ export default function AdminPage() {
     Math.ceil(inquiryCount / INQUIRY_PAGE_SIZE)
   );
 
+  useEffect(() => {
+    adminVerifiedRef.current = adminVerified;
+  }, [adminVerified]);
+
   const storeAdminAccessToken = useCallback((accessToken = "") => {
     adminAccessTokenRef.current = accessToken;
     setAdminAccessTokenAvailable(Boolean(accessToken));
@@ -340,9 +346,26 @@ export default function AdminPage() {
   const checkAdminSession = useCallback(async () => {
     const authCheckId = authCheckIdRef.current + 1;
     authCheckIdRef.current = authCheckId;
+    let safetyTimeoutId;
 
+    logAdminAuthDebug("dashboard verification started", { authCheckId });
     setCheckingAuth(true);
     setAuthError("");
+
+    safetyTimeoutId = window.setTimeout(() => {
+      if (authCheckId !== authCheckIdRef.current || adminVerifiedRef.current) {
+        return;
+      }
+
+      logAdminAuthDebug("setting authError", {
+        authCheckId,
+        reason: "dashboard_verification_safety_timeout",
+      });
+      setCheckingAuth(false);
+      setAuthError(
+        "Admin session verification is taking too long. Please retry or log in again."
+      );
+    }, ADMIN_DASHBOARD_AUTH_SAFETY_MS);
 
     try {
       const {
@@ -352,7 +375,15 @@ export default function AdminPage() {
         status,
       } = await verifyAdminSession();
 
+      logAdminAuthDebug("dashboard verification returned", {
+        authCheckId,
+        status,
+        hasUser: Boolean(verifiedUser),
+        errorMessage: error?.message || "",
+      });
+
       if (authCheckId !== authCheckIdRef.current) {
+        logAdminAuthDebug("stale verification ignored", { authCheckId });
         return;
       }
 
@@ -365,6 +396,12 @@ export default function AdminPage() {
           await supabase.auth.signOut();
         }
 
+        logAdminAuthDebug("setting authError", {
+          authCheckId,
+          status,
+          message:
+            error?.message || "Please log in to access the admin portal.",
+        });
         setAuthError(
           error?.message || "Please log in to access the admin portal."
         );
@@ -373,20 +410,41 @@ export default function AdminPage() {
 
       storeAdminAccessToken(session?.access_token || "");
       setUser(verifiedUser);
+      logAdminAuthDebug("setting adminVerified true", {
+        authCheckId,
+        email: verifiedUser.email || "",
+      });
       setAdminVerified(true);
+      setAuthError("");
     } catch (error) {
       if (authCheckId !== authCheckIdRef.current) {
+        logAdminAuthDebug("stale verification ignored", { authCheckId });
         return;
       }
 
       setUser(null);
       setAdminVerified(false);
       clearAdminSessionState();
+      logAdminAuthDebug("setting authError", {
+        authCheckId,
+        message: error.message || "Unable to verify admin access.",
+      });
       setAuthError(error.message || "Unable to verify admin access.");
       toast.error(error.message || "Unable to verify admin access.");
     } finally {
+      if (safetyTimeoutId) {
+        window.clearTimeout(safetyTimeoutId);
+      }
+
       if (authCheckId === authCheckIdRef.current) {
+        logAdminAuthDebug("verification finally clearing loading", {
+          authCheckId,
+        });
         setCheckingAuth(false);
+      } else {
+        logAdminAuthDebug("stale verification finally ignored", {
+          authCheckId,
+        });
       }
     }
   }, [
