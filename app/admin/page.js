@@ -226,6 +226,8 @@ export default function AdminPage() {
 
   const [user, setUser] = useState(null);
   const [adminVerified, setAdminVerified] = useState(false);
+  const [authHydrated, setAuthHydrated] = useState(false);
+  const [hydratedSessionUser, setHydratedSessionUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [authError, setAuthError] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
@@ -437,23 +439,82 @@ export default function AdminPage() {
   ]);
 
   useEffect(() => {
+    if (!authHydrated) {
+      return undefined;
+    }
+
+    if (!hydratedSessionUser) {
+      logAdminAuthDebug("auth hydration completed without user", {
+        authHydrated,
+      });
+      setUser(null);
+      setAdminVerified(false);
+      clearAdminSessionState();
+      setAuthError("Please log in to access the admin portal.");
+      setCheckingAuth(false);
+      return undefined;
+    }
+
+    if (adminVerifiedRef.current || isVerifyingRef.current) {
+      logAdminAuthDebug("hydrated auth verification already satisfied/running", {
+        adminVerified: adminVerifiedRef.current,
+        isVerifying: isVerifyingRef.current,
+      });
+      return undefined;
+    }
+
+    logAdminAuthDebug("auth hydration ready; starting admin verification", {
+      email: hydratedSessionUser.email || "",
+    });
     checkAdminSession();
-  }, [checkAdminSession]);
+
+    return undefined;
+  }, [
+    authHydrated,
+    checkAdminSession,
+    clearAdminSessionState,
+    hydratedSessionUser,
+  ]);
+
+  useEffect(() => {
+    if (authHydrated || adminVerified) {
+      return undefined;
+    }
+
+    const hydrationTimeoutId = window.setTimeout(() => {
+      if (authHydrated || adminVerifiedRef.current) {
+        return;
+      }
+
+      logAdminAuthDebug("setting authError", {
+        reason: "auth_hydration_timeout",
+      });
+      setCheckingAuth(false);
+      setAuthError(
+        "Admin session is still loading. Please retry or log in again."
+      );
+    }, ADMIN_DASHBOARD_AUTH_SAFETY_MS);
+
+    return () => window.clearTimeout(hydrationTimeoutId);
+  }, [adminVerified, authHydrated]);
 
   useEffect(() => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
+      logAdminAuthDebug("dashboard auth event", {
+        event,
+        hasSession: Boolean(session),
+        email: session?.user?.email || "",
+      });
+
       if (loggingOutRef.current) {
         return;
       }
 
-      if (isVerifyingRef.current) {
-        logAdminAuthDebug("auth event ignored during verification", { event });
-        return;
-      }
-
       if (event === "SIGNED_OUT") {
+        setAuthHydrated(true);
+        setHydratedSessionUser(null);
         setUser(null);
         setAdminVerified(false);
         clearAdminSessionState();
@@ -462,16 +523,13 @@ export default function AdminPage() {
         return;
       }
 
-      if (!session?.user) {
+      if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
+        setAuthHydrated(true);
+        setHydratedSessionUser(session?.user || null);
         return;
       }
 
-      if (!isAdminEmail(session.user.email)) {
-        setUser(null);
-        setAdminVerified(false);
-        clearAdminSessionState();
-        setAuthError("You are not authorized to access the admin portal.");
-        setCheckingAuth(false);
+      if (!session?.user) {
         return;
       }
 
