@@ -74,6 +74,8 @@ export default async function sitemap() {
     route("/shop", { changeFrequency: "daily", priority: 0.9 }),
     route("/about", { changeFrequency: "monthly", priority: 0.6 }),
     route("/contact", { changeFrequency: "monthly", priority: 0.6 }),
+    route("/privacy", { changeFrequency: "yearly", priority: 0.45 }),
+    route("/terms", { changeFrequency: "yearly", priority: 0.45 }),
     route("/return-policy", { changeFrequency: "monthly", priority: 0.5 }),
   ];
 

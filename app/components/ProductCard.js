@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { memo, useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import { FaHeart, FaRegHeart } from "react-icons/fa";
 
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
@@ -107,10 +108,15 @@ function ProductCard({
             <button
               type="button"
               onClick={handleWishlistClick}
-              className="wishlist-btn"
+              className={`wishlist-btn ${saved ? "is-active" : ""}`}
               aria-label={saved ? "Remove from wishlist" : "Add to wishlist"}
+              aria-pressed={saved}
             >
-              {saved ? "\u2665" : "\u2661"}
+              {saved ? (
+                <FaHeart aria-hidden="true" />
+              ) : (
+                <FaRegHeart aria-hidden="true" />
+              )}
             </button>
 
             <Image
