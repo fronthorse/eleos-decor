@@ -62,6 +62,34 @@ Target audience:
 ## Version Control
 - GitHub
 
+## Recent Production Milestones
+- Step 1 admin auth/session stability is fixed and deployed
+  - Commit: de91ae4de043a3bddea6437130081fa00d9e70fa
+  - Deployment: dpl_AAJF9cfcoZQefxpamx33ss4yiU1j
+  - Production auth refresh/login/logout testing passed
+- Step 2 admin product upload/save stability is fixed and deployed
+  - Commit: 0d098d9291c19aa00ddcc386896455e88526fffc
+  - Deployment: dpl_4to4o5bzNvCUiqb5qsKoY1vSCWYu
+  - Product create/edit, frame print variants, gallery upload, duplicate prevention, and admin session retention were verified
+- Step 3 shop product loading stability/performance is fixed and deployed
+  - Commit: f37c807831e565beb1ae4b4d47d84616fab9aafc
+  - Deployment: dpl_4wRCkH8uBDjJAhaNzFqMShSVHMUK
+  - Shop uses Supabase-side pagination, filtering, sorting, and search
+- Step 4 mobile UI/performance polish is fixed and deployed
+  - Commits: bede843 and a480537
+  - Deployment: dpl_48ebRGNFc3vrAYQza8dRMYBVXVZz
+  - Mobile navbar, Shop accordion, product grid/detail layout, floating AI/WhatsApp spacing, and AI drag clamping were verified across 360, 390, 414, and 768px
+- AI Decor Assistant intelligence upgrade is fixed and deployed
+  - Commit: 20e5fb1
+  - Deployment: dpl_7ZSBvt7bRjo2U6ByST89SXDBUF6M
+  - Live Playwright chatbot tests passed on desktop and mobile with no console errors or validation errors
+- Admin product upload/edit UX refinement is fixed and deployed
+  - Commit: dec793f
+  - Deployment: dpl_C9iUMQtj2bKBSrXLvvw5bwHQuAot
+  - Admin product editor now has a premium two-column desktop layout, sticky live preview, inline collapsible variant cards, duplicate/add/reorder/collapse controls, image preview grids, and mobile-safe stacking
+  - Live Chrome Playwright tests passed for desktop and 360/390/414/768px mobile widths with no horizontal overflow or console errors
+  - Live save/upload test created and deleted temporary simple and frame products; /api/admin/products and /api/admin/product-variants returned 200, and product detail variant rendering was verified
+
 ---
 
 # PROJECT STRUCTURE
@@ -241,37 +269,59 @@ Sitemap: https://eleosdecor.com/sitemap.xml
 - AI Decor Assistant and the floating WhatsApp button are hidden on admin, auth, customer, cart, checkout-sensitive, and other non-public routes through the route allowlist
 - Existing WhatsApp floating button remains separate for direct human support
 - WhatsApp floating button must remain separate and fixed; do not remove it
-- AI Decor Assistant floating button is draggable, minimizable/collapsible, and uses a subtle first-visit tooltip
-- AI Decor Assistant draggable position is stored in localStorage under eleos_ai_assistant_position and should remain stable across open/close, refresh, and navigation
-- The draggable position should only be clamped when it exceeds viewport boundaries; opening or closing the chat should not recalculate/reset the saved button position
-- The expanded chat panel is positioned relative to the minimized button so closing the panel returns the button to the same dragged position
-- Frontend-only recommendation logic for now; no OpenAI backend connected yet
-- AI Decor Assistant is product-aware and searches Supabase products
+- AI Decor Assistant floating button is draggable and minimizable/collapsible
+- AI Decor Assistant drag is bounded to the viewport and avoids overlapping the WhatsApp floating button
+- Current drag position is component-local and recalamped on resize/orientation changes; persistence may be added later if desired
+- The expanded chat panel remains fixed and mobile-safe while the minimized button stays reachable
+- AI Decor Assistant now uses a hybrid server-side chatbot route at app/api/chatbot/route.js
+- The chatbot route uses GEMINI_API_KEY server-side only; never expose or log this key in browser code, client responses, debug labels, or server diagnostics
+- GEMINI_API_KEY is optional for local development; when it is missing, rate-limited, returns invalid JSON, or fails, the assistant falls back to the existing rule-based response behavior
+- Optional NEXT_PUBLIC_CHATBOT_DEBUG=true shows temporary development-only response labels under assistant messages without exposing prompts, API keys, stack traces, or raw Gemini responses
+- The current request flow is user message -> existing chatbot UI -> /api/chatbot -> intent parsing -> Supabase product search/context builder -> Gemini response generation -> safe structured response -> existing chatbot UI rendering
+- Intent parsing can use Gemini first, then safe rule/category/budget fallback parsing if Gemini is unavailable or invalid
+- Supabase product search must run after intent parsing and before Gemini response generation, regardless of whether Gemini response generation later succeeds
+- Gemini receives only limited, relevant Supabase product context, not the full database
+- Gemini may recommend only products returned by Supabase search results; product cards/buttons must be rendered only from safe Supabase product objects and hrefs
+- If no relevant product is found, the assistant should say so naturally and guide customers to WhatsApp or nearby categories without inventing stock
+- AI Decor Assistant remains product-aware and searches Supabase products
 - Detects decor spaces such as living room, dining area, TV console, bedroom, office, entryway, hallway, kitchen, apartment, and home
+- Current budget parsing includes 500k, 1m, 1.5m, 1,000,000 naira, and ₦250,000 style formats
 - Detects budget formats such as 500k, 1m, 1,000,000 naira, and ₦250,000
 - Detects style preferences such as luxury, modern, minimal, cozy, classy, warm, simple, and elegant
 - Tracks richer guided-consultation preferences such as color palette, room size, and apartment/home/office context
-- Generates decor category recommendations and budget allocation guidance
+- Generates room/style-aware decor plans and budget allocation guidance
+- Budget-aware recommendations select actual products where possible and give phased plans when a full direction exceeds the budget
 - Has guided decor consultation flow
-- Reuses conversation context and handles customer preference changes mid-chat
+- Reuses conversation context and handles customer preference changes mid-chat, including follow-ups such as "Actually make it for bedroom"
 - Supports product availability questions by searching Supabase products
 - Product search uses title, category, and description through products.search_vector/full-text RPC with fallback search logic
+- Chatbot route search expands customer intent into safe query variants, deduplicates products, applies budget/category filters where possible, and limits product context before response generation
+- Known assistant categories include Frames, Artificial plants, Flowers, Decorative lights, Mirrors, Rugs, Tables, Figurines, Diffusers, Humidifiers, Wall clocks, Decorative accessories, Dining sets, Ornaments, Chairs, Scented Candles, Faux books, Lamps, Throw pillows, and Throw blankets
+- Intent normalization should handle Nigerian/customer phrasing such as sitting room/parlour -> living room, TV area/TV console -> living room or console styling, centerpiece/centrepiece -> tables/vases/flowers/ornaments, dining -> dining sets/tables/chairs/flowers/accessories, wall decor -> frames/mirrors/wall clocks, and fragrance -> diffusers/candles/humidifiers
+- Budget normalization should handle language such as 500k -> 500000, 1m -> 1000000, and naira-formatted amounts
 - Category-specific product requests must pass a hard relevance gate before rendering product cards
 - Hard category filtering is implemented in lib/productSearch.js through filterProductsByDetectedCategory/filterProductsByCategoryRelevance
-- Strict category filters currently apply to dining sets, rugs, mirrors, frames, wall clocks, flowers, lamps/decorative lights, diffusers, and humidifiers
+- Strict category filters apply to dining sets, tables/center tables, side stools, chairs, bedsheets, rugs/carpets, mirrors, frames/photo frames/wall frames, wall clocks, flowers, lamps/decorative lights, diffusers/scents, humidifiers, candles, throw pillows, throw blankets, figurines/ornaments, faux books, and water fountains
+- Synonym/typo handling includes dining/dinning, center table/coffee table, wall frame/photo frame/frame, artificial plant/faux plant, rug/carpet, lamp/decorative light, diffuser/scent/fragrance, flower/vase flower, clock/wall clock, and mirror/wall mirror
 - Dining set queries must never render unrelated products such as blankets, pillows, rugs, frames, flowers, mirrors, wall clocks, diffusers, humidifiers, ornaments, or general decor accessories
 - Dining set matching allows dining/dinning typo variants and dining set/table/chair/room language
 - Do not fill category result lists with generic fallback products; show only relevant products, even if the result count is low
+- If no exact category products remain after filtering, the assistant should clearly say the category is not available right now and offer clearly labeled alternatives or WhatsApp support
 - If no exact dining set products remain after filtering, the assistant should say: "We don’t seem to have dining sets available right now, but I can help you explore dining-area decor or connect you on WhatsApp."
-- Product result messages render each product with title, price, and an immediate View Product button before global Shop/WhatsApp CTAs
+- Product result messages render each product with title, category, price, reason it matches, and an immediate View Product button before global Shop/WhatsApp CTAs
 - Product result buttons appear directly under each product
 - Includes quick actions, typed messages, loading state, and Clear chat
 - Current quick action chips should remain: Browse products, Help me choose decor, Delivery information, How to order, Chat on WhatsApp
 - Assistant tone should stay confident, premium, concise, and helpful; avoid weak/apologetic language such as "I'm still learning"
+- Gemini system behavior must stay warm, premium, concise, Nigerian-customer friendly, and must not invent products, prices, discounts, delivery timelines, availability, or final payment/delivery confirmations
+- For final purchase, payment, delivery, or availability confirmation, the assistant should direct customers to WhatsApp
+- Server logs for chatbot diagnostics must remain safe: intent parse success/failure, search variants used, product result count, and Gemini fallback reason/status only; never log API keys, full prompts, raw Gemini output, stack traces, or full private customer data
 - Chat history persists during navigation and browser refresh
 - Guest persistence uses localStorage scoped to guest
 - Logged-in persistence uses user-scoped localStorage plus Supabase table ai_chat_sessions
 - AI chat persistence must never share history between users; localStorage keys are scoped by guest/user id and old shared keys are removed
+- Latest live assistant tests passed for dining set, dinning typo, center tables, living room under 500k, modern bedroom, wall frames, rugs unavailable handling, TV console lamp, 1m budget, luxury style, bedroom follow-up, delivery, and order prompts
+- Live assistant tests verified product card categories, View Product links, strict dining/table/frame/rug/lamp relevance, no console errors, and mobile panel usability
 
 ## Cart & Checkout
 - Cart drawer
@@ -307,7 +357,12 @@ Sitemap: https://eleosdecor.com/sitemap.xml
 - Gallery management
 - Admin product management supports first-phase frame print variants only; variants are added under frame products with label, image, optional gallery, optional price override, optional SKU, and default print flag
 - Admin product list is intentionally compact and operational: thumbnail, title, category, price, image count, variant count, and quick Edit/Delete actions
-- Admin upload/edit form is grouped into Basic Info, Pricing & Category, Images, and Variants sections; keep it compact and practical rather than storefront-styled
+- Admin upload/edit form is a focused product editor, not a full dashboard rewrite
+- Admin upload/edit form is grouped into Basic Information, Images & Gallery, and Variants sections with a premium modern CMS feel
+- Admin product editor uses a two-column desktop layout with a sticky live preview panel; on mobile, the preview stacks below the form and remains collapsible
+- Admin variant management uses inline collapsible variant cards rather than modal-heavy editing
+- Variant editor controls include Add Variant, Add 3 Variants, Duplicate Last, Collapse All, Expand All, duplicate per variant, remove per variant, up/down reorder controls, default selector, variant type, price override, SKU, main image, gallery images, and inline duplicate-label validation
+- Admin editor preview and image grids are UI-only refinements; preserve existing TUS upload behavior, product gallery upload behavior, save retry protection, and API routes
 - Inquiry management
 - Analytics dashboard
 - Product upload/edit disables submit controls while saving and shows toast confirmation to prevent duplicate submissions
@@ -455,13 +510,15 @@ Performance index SQL:
 
 # KNOWN ISSUES / WATCHLIST
 
-## Unresolved Current Task
-- Current active bug cluster is not fixed yet and must be treated as unresolved:
-  - Admin login is failing or hanging at "authenticating user".
-  - Product upload is failing and appears to expire/log out the admin session during upload attempts.
-  - Products are failing to load on the shop page.
-  - Mobile experience is currently poor, with slow loading and messy/general layout or usability issues.
-- Priority is to investigate authentication/session stability, admin product upload flow, shop product loading, and mobile performance/responsiveness before marking this task complete.
+## Current Production Baseline
+- Admin auth/session stability is fixed in production
+- Admin product upload/save stability is fixed in production
+- Shop product loading, pagination, filtering, sorting, and search stability are fixed in production
+- Mobile public UI polish is fixed in production
+- AI Decor Assistant intelligence upgrade is fixed in production
+- Admin product upload/edit UX refinement is fixed in production
+- Do not rewrite these stable systems unless a new production test identifies a concrete regression
+- Keep future changes focused and backed by automated evidence
 
 ## Areas to be careful with
 - CheckoutForm

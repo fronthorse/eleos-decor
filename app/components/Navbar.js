@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
@@ -8,6 +9,7 @@ import { createClient } from "../../lib/supabase/client";
 import { getSessionSafely } from "../../lib/supabase/auth";
 import { isAdminEmail } from "../../lib/adminAuth";
 import { shopNavigation } from "../../lib/navigationData";
+import { getProductPreviewImageSrc } from "../../lib/productImages";
 import MiniCartDrawer from "./MiniCartDrawer";
 import { useRouter } from "next/navigation";
 import {
@@ -293,9 +295,12 @@ export default function Navbar() {
                         onClick={closeNavigationMenus}
                       >
                         <span className="mega-menu-feature-image">
-                          <img
-                            src={featuredProduct.image_url}
+                          <Image
+                            src={getProductPreviewImageSrc(featuredProduct)}
                             alt={featuredProduct.title}
+                            width={220}
+                            height={180}
+                            sizes="220px"
                           />
                         </span>
 

@@ -2,7 +2,10 @@
 
 import Image from "next/image";
 import { useMemo } from "react";
-import { PRODUCT_IMAGE_FALLBACK } from "../../lib/productImages";
+import {
+  getProductPreviewImageSrc,
+  PRODUCT_IMAGE_FALLBACK,
+} from "../../lib/productImages";
 
 export default function ProductVariantSelector({
   variants = [],
@@ -41,7 +44,7 @@ export default function ProductVariantSelector({
             >
               <span className="product-variant-thumb">
                 <Image
-                  src={variant.image_url || PRODUCT_IMAGE_FALLBACK}
+                  src={getProductPreviewImageSrc(variant)}
                   alt={variant.variant_label}
                   width={96}
                   height={96}

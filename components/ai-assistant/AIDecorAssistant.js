@@ -37,8 +37,41 @@ function createAssistantMessage(reply) {
   return {
     id: `assistant-${Date.now()}`,
     role: "assistant",
+    source: reply.source || "fallback",
+    intentSource: reply.intentSource || "fallback",
     ...withResolvedCtas(reply),
   };
+}
+
+async function requestGeminiReply({ message, memory, messages }) {
+  const response = await fetch("/api/chatbot", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message,
+      memory,
+      messages: messages
+        .slice(-8)
+        .map(({ role, text }) => ({ role, text }))
+        .filter((item) => item.text),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Chatbot API request failed.");
+  }
+
+  const result = await response.json();
+
+  if (result?.useFallback || !result?.reply) {
+    const error = new Error("Chatbot API requested fallback.");
+    error.intentSource = result?.intentSource || "fallback";
+    throw error;
+  }
+
+  return result;
 }
 
 export default function AIDecorAssistant() {
@@ -344,7 +377,22 @@ export default function AIDecorAssistant() {
     ]);
 
     try {
-      const result = await buildReply(trimmedValue);
+      let result;
+
+      try {
+        result = await requestGeminiReply({
+          message: trimmedValue,
+          memory: assistantMemory,
+          messages,
+        });
+      } catch (error) {
+        result = await buildReply(trimmedValue);
+        result.reply = {
+          ...result.reply,
+          source: "fallback",
+          intentSource: error?.intentSource || "fallback",
+        };
+      }
 
       if (conversationVersionRef.current !== conversationVersion) {
         return;
@@ -369,7 +417,11 @@ export default function AIDecorAssistant() {
 
         setMessages((current) => [
           ...current,
-          createAssistantMessage(buildFallbackReply(assistantMemory)),
+          createAssistantMessage({
+            ...buildFallbackReply(assistantMemory),
+            source: "fallback",
+            intentSource: "fallback",
+          }),
         ]);
         setIsThinking(false);
       }, 180);

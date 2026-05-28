@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useCart } from "../../context/CartContext";
 import CheckoutForm from "./CheckoutForm";
@@ -75,9 +76,12 @@ export default function MiniCartDrawer({ isOpen, onClose }) {
                     key={itemKey}
                     className="mini-cart-item d-flex gap-3 mb-4"
                   >
-                    <img
+                    <Image
                       src={getProductPreviewImageSrc(item)}
                       alt={item.title}
+                      width={72}
+                      height={72}
+                      sizes="72px"
                       loading="lazy"
                       onError={handlePreviewImageError}
                     />

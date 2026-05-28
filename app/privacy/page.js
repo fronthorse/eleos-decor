@@ -85,7 +85,7 @@ export default function PrivacyPage() {
             If you sign in with Google, Google may share basic account
             information such as your name and email address so we can create or
             access your Eleos Decor customer profile. Your use of Google login
-            is also subject to Google's own privacy and account policies.
+            is also subject to Google&apos;s own privacy and account policies.
           </p>
         </PolicySection>
 

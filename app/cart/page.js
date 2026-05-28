@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import CheckoutForm from "../components/CheckoutForm";
@@ -63,9 +64,12 @@ export default function CartPage() {
                   <div key={itemKey} className="soft-card p-3 mb-4">
                     <div className="row align-items-center g-3">
                       <div className="col-md-3">
-                        <img
+                        <Image
                           src={getProductPreviewImageSrc(item)}
                           alt={item.title}
+                          width={220}
+                          height={140}
+                          sizes="(max-width: 767px) 100vw, 220px"
                           loading="lazy"
                           className="img-fluid rounded"
                           onError={handlePreviewImageError}

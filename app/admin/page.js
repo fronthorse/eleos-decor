@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
@@ -2054,9 +2055,12 @@ export default function AdminPage() {
                   <div className="admin-existing-variants mb-3">
                     {existingVariants.map((variant) => (
                       <div className="admin-existing-variant" key={variant.id}>
-                        <img
+                        <Image
                           src={getProductPreviewImageSrc(variant)}
                           alt={variant.variant_label}
+                          width={64}
+                          height={64}
+                          sizes="64px"
                           loading="lazy"
                           onError={handlePreviewImageError}
                         />
@@ -2655,9 +2659,12 @@ We are contacting you regarding your order.`;
                 return (
                 <article className="admin-product-card" key={product.id}>
                   <div className="admin-product-thumb">
-                    <img
+                    <Image
                       src={getProductPreviewImageSrc(product)}
                       alt={product.title}
+                      width={96}
+                      height={96}
+                      sizes="96px"
                       loading="lazy"
                       onError={handlePreviewImageError}
                     />

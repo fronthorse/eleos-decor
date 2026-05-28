@@ -709,6 +709,15 @@ body {
   border-bottom-right-radius: 6px;
 }
 
+.ai-assistant-debug-label {
+  width: fit-content;
+  margin: -5px 0 10px 8px;
+  color: rgba(31, 31, 31, 0.52);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
 .ai-assistant-ctas {
   display: flex;
   flex-wrap: wrap;

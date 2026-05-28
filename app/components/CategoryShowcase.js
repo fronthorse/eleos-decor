@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 const categories = [
@@ -48,15 +49,14 @@ export default function CategoryShowcase() {
                 <div
                   className="category-card position-relative rounded overflow-hidden shadow-sm h-100"
                   data-aos="fade-up"
+                  style={{ minHeight: "220px" }}
                 >
-                  <img
+                  <Image
                     src={category.image}
                     alt={category.title}
-                    style={{
-                      width: "100%",
-                      height: "220px",
-                      objectFit: "cover",
-                    }}
+                    fill
+                    sizes="(max-width: 767px) 100vw, (max-width: 991px) 33vw, 16vw"
+                    style={{ objectFit: "cover" }}
                   />
 
                   <div
