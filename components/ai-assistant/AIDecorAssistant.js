@@ -65,9 +65,28 @@ async function requestGeminiReply({ message, memory, messages }) {
 
   const result = await response.json();
 
+  if (result?.useFallback && result?.foundProducts?.length > 0) {
+    return {
+      memory: result.memory || memory,
+      reply: {
+        text:
+          result.fallbackText ||
+          "Sure, I found available Eleos Decor products that match. Here are the strongest options from the current catalogue.",
+        products: result.foundProducts,
+        ctas: result.ctas || [
+          { label: "Browse Shop", href: "/shop" },
+          { label: "Continue on WhatsApp", href: "whatsapp" },
+        ],
+        source: "fallback",
+        intentSource: result.intentSource || "fallback",
+      },
+    };
+  }
+
   if (result?.useFallback || !result?.reply) {
     const error = new Error("Chatbot API requested fallback.");
     error.intentSource = result?.intentSource || "fallback";
+    error.foundProducts = result?.foundProducts || [];
     throw error;
   }
 
