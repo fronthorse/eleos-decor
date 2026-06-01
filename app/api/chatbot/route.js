@@ -25,6 +25,8 @@ const GEMINI_TIMEOUT_MS = 12000;
 const MAX_SEARCH_VARIANTS = 10;
 const MAX_PRODUCT_CONTEXT = 6;
 const MIN_RECOMMENDED_PRODUCTS = 3;
+const CHATBOT_DEBUG_ENABLED =
+  process.env.NEXT_PUBLIC_CHATBOT_DEBUG === "true";
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
@@ -53,6 +55,19 @@ Known categories: Frames, Artificial plants, Flowers, Decorative lights, Mirrors
 Normalize synonyms: sitting room/parlour/parlor means living room; TV area/TV console means living room or console styling; centerpiece/centrepiece means tables, vases, flowers, ornaments; dining means dining sets, tables, chairs, flowers, decorative accessories; office decor means frames, plants, diffusers, clocks; wall decor means frames, mirrors, wall clocks; fragrance means diffusers, scented candles, humidifiers.
 Normalize Nigerian budgets: 500k means 500000, 1m means 1000000, ₦250,000 means 250000.
 Return keys: intentType, searchTerms, categories, spaces, style, budgetMax, budgetMin, mustHave, avoid, needsClarification, clarifyingQuestion.
+`;
+
+const DECISION_SYSTEM_INSTRUCTION = `
+You classify each Eleos Decor customer message before any product search.
+Return JSON only. Do not answer the customer.
+messageType must be one of: greeting, capability_question, product_search, category_search, room_styling, budget_request, order_help, delivery_help, payment_help, return_policy, follow_up_refinement, complaint, unclear.
+action must be one of: answer_directly, search_products, search_more_products, ask_clarifying_question, guide_to_whatsapp.
+General questions such as "what can you do", "hello", "who are you", "how do I order", "do you deliver", payment, and return questions must not reuse old product context.
+Reuse previous product context only for clear follow-ups such as just that, show me more, anything else, cheaper ones, luxury ones, different style, under 100k, or for bedroom instead.
+If the customer mentions a new category, reset previous product context and search the new category.
+Known categories: Frames, Artificial plants, Flowers, Decorative lights, Mirrors, Rugs, Tables, Figurines, Diffusers, Humidifiers, Wall clocks, Decorative accessories, Dining sets, Ornaments, Chairs, Scented Candles, Faux books, Lamps, Throw pillows, Throw blankets.
+Normalize Nigerian/customer language: parlour/sitting room means living room; TV area/TV console means living room or console styling; centrepiece/centerpiece means table decor, flowers, vases, ornaments; affordable/budget friendly/not too expensive means budget_request; 500k means 500000; 1m means 1000000; 50 thousand means 50000.
+Return keys exactly: messageType, isFollowUp, shouldReusePreviousContext, resetPreviousProductContext, activeCategory, searchTerms, roomOrSpace, style, budgetMin, budgetMax, wantsMoreOptions, wantsCheaperOptions, wantsLuxuryOptions, wantsDifferentCategory, clarifyingQuestion, action.
 `;
 
 const CATEGORY_LABELS = {
@@ -144,6 +159,55 @@ const SYNONYM_EXPANSIONS = [
   },
 ];
 
+const MESSAGE_TYPES = [
+  "greeting",
+  "capability_question",
+  "product_search",
+  "category_search",
+  "room_styling",
+  "budget_request",
+  "order_help",
+  "delivery_help",
+  "payment_help",
+  "return_policy",
+  "follow_up_refinement",
+  "complaint",
+  "unclear",
+];
+
+const DECISION_ACTIONS = [
+  "answer_directly",
+  "search_products",
+  "search_more_products",
+  "ask_clarifying_question",
+  "guide_to_whatsapp",
+];
+
+const GENERAL_QUESTION_TERMS = {
+  greeting: ["hello", "hi", "hey", "good morning", "good afternoon", "good evening"],
+  capability_question: [
+    "what can you do",
+    "who are you",
+    "what do you do",
+    "how can you help",
+  ],
+  order_help: ["how do i order", "how to order", "place an order", "order process"],
+  delivery_help: ["do you deliver", "delivery", "deliver", "shipping", "waybill"],
+  payment_help: ["payment", "pay", "transfer", "card payment", "checkout"],
+  return_policy: ["return policy", "returns", "refund", "exchange"],
+};
+
+const BUDGET_REQUEST_TERMS = [
+  "budget friendly",
+  "affordable",
+  "not too expensive",
+  "cheap",
+  "cheaper",
+  "low budget",
+  "within budget",
+  "budget",
+];
+
 function json(data, status = 200) {
   return Response.json(data, { status });
 }
@@ -166,8 +230,29 @@ function logIntentParse(status, details = {}) {
   });
 }
 
+function logDecisionParse(status, details = {}) {
+  console.info("Gemini chatbot decision parse", {
+    status,
+    ...details,
+  });
+}
+
 function logProductSearch(details = {}) {
   console.info("Gemini chatbot product search", details);
+}
+
+function logChatbotDebug(label, products = []) {
+  if (!CHATBOT_DEBUG_ENABLED) {
+    return;
+  }
+
+  console.info(`Chatbot debug: ${label}`, {
+    productCount: products.length,
+    products: products.map((product) => ({
+      href: product.href,
+      title: product.title,
+    })),
+  });
 }
 
 function fallbackResponse(
@@ -206,6 +291,15 @@ function sanitizeHistory(messages) {
     .map((message) => ({
       role: message.role,
       text: sanitizeMessage(message.text),
+      products: Array.isArray(message.products)
+        ? message.products
+            .slice(0, MAX_PRODUCT_CONTEXT)
+            .map((product) => ({
+              href: String(product?.href || "").slice(0, 120),
+              title: String(product?.title || "").slice(0, 120),
+            }))
+            .filter((product) => product.href || product.title)
+        : [],
     }))
     .filter((message) => message.text);
 }
@@ -243,6 +337,7 @@ function defaultCtas(intentType) {
 
 function normalizeProductContext(products = []) {
   return products.slice(0, MAX_PRODUCT_CONTEXT).map((product) => ({
+    id: product.id,
     title: product.title,
     category: product.category,
     price: product.price,
@@ -253,9 +348,9 @@ function normalizeProductContext(products = []) {
 }
 
 function buildGeminiPrompt({
-  message,
-  history,
-  memory,
+        message,
+        history,
+        memory: responseMemory,
   intent,
   structuredIntent,
   products,
@@ -589,10 +684,307 @@ function buildIntentPrompt({ message, history, memory }) {
   });
 }
 
+function previousAssistantProducts(history = []) {
+  const previousAssistant = [...history]
+    .reverse()
+    .find((item) => item.role === "assistant" && item.products?.length);
+
+  return previousAssistant?.products || [];
+}
+
+function normalizeDecisionAction(value, fallback = "answer_directly") {
+  const action = String(value || "").toLowerCase();
+  return DECISION_ACTIONS.includes(action) ? action : fallback;
+}
+
+function normalizeMessageType(value, fallback = "unclear") {
+  const messageType = String(value || "").toLowerCase();
+  return MESSAGE_TYPES.includes(messageType) ? messageType : fallback;
+}
+
+function includesAnyNormalized(text, terms = []) {
+  return terms.some((term) => text.includes(normalizeText(term)));
+}
+
+function getGeneralMessageType(message) {
+  const text = normalizeText(message);
+
+  if (GENERAL_QUESTION_TERMS.greeting.some((term) => text === normalizeText(term))) {
+    return "greeting";
+  }
+
+  return (
+    Object.entries(GENERAL_QUESTION_TERMS).find(([, terms]) =>
+      includesAnyNormalized(text, terms)
+    )?.[0] || ""
+  );
+}
+
+function isCheaperRequest(message) {
+  const text = normalizeText(message);
+  return includesAnyNormalized(text, [
+    "cheaper",
+    "cheap",
+    "less expensive",
+    "lower price",
+    "below",
+    "under",
+    "not too expensive",
+  ]);
+}
+
+function isLuxuryRequest(message) {
+  const text = normalizeText(message);
+  return includesAnyNormalized(text, [
+    "luxury",
+    "premium",
+    "classy",
+    "elegant",
+    "high end",
+    "expensive",
+  ]);
+}
+
+function getPreviousCategoryFromMemory(memory) {
+  return normalizeCategoryLabels(memory?.categories || [])[0] || "";
+}
+
+function createFallbackCommerceDecision({
+  message,
+  memory,
+  history,
+  structuredIntent,
+}) {
+  const text = normalizeText(message);
+  const generalType = getGeneralMessageType(message);
+  const productQuery = detectProductQuery(message);
+  const categoryLabels = normalizeCategoryLabels([
+    ...detectCategories(message),
+    ...(productQuery.categories || []),
+    ...(structuredIntent?.categories || []),
+  ]);
+  const room = detectRoom(message) || structuredIntent?.spaces?.[0] || "";
+  const budget = detectBudget(message);
+  const style = unique([
+    detectStyle(message),
+    ...(structuredIntent?.style || []),
+  ]);
+  const wantsMoreOptions = isMoreOptionsRequest(message);
+  const wantsCheaperOptions = isCheaperRequest(message);
+  const wantsLuxuryOptions = isLuxuryRequest(message);
+  const previousCategory = getPreviousCategoryFromMemory(memory);
+  const hasPreviousProducts = previousAssistantProducts(history).length > 0;
+  const hasNewCategory = categoryLabels.length > 0;
+  const budgetRequest =
+    includesAnyNormalized(text, BUDGET_REQUEST_TERMS) || Boolean(budget.amount);
+  const isFollowUp =
+    hasPreviousProducts &&
+    !generalType &&
+    !hasNewCategory &&
+    (wantsMoreOptions ||
+      wantsCheaperOptions ||
+      wantsLuxuryOptions ||
+      Boolean(budget.amount) ||
+      Boolean(room) ||
+      text.includes("instead") ||
+      text.includes("different style"));
+
+  if (generalType) {
+    return {
+      messageType: generalType,
+      isFollowUp: false,
+      shouldReusePreviousContext: false,
+      resetPreviousProductContext: true,
+      activeCategory: "",
+      searchTerms: [],
+      roomOrSpace: "",
+      style: [],
+      budgetMin: null,
+      budgetMax: null,
+      wantsMoreOptions: false,
+      wantsCheaperOptions: false,
+      wantsLuxuryOptions: false,
+      wantsDifferentCategory: false,
+      clarifyingQuestion: "",
+      action:
+        generalType === "payment_help" ? "guide_to_whatsapp" : "answer_directly",
+      source: "fallback",
+    };
+  }
+
+  if (hasNewCategory || productQuery.isProductQuery) {
+    return {
+      messageType: hasNewCategory ? "category_search" : "product_search",
+      isFollowUp: false,
+      shouldReusePreviousContext: false,
+      resetPreviousProductContext: true,
+      activeCategory: categoryLabels[0] || "",
+      searchTerms: unique([
+        ...(structuredIntent?.searchTerms || []),
+        message,
+        ...getProductCategorySearchKeywords(normalizeCategoryKeys(categoryLabels)),
+      ]).slice(0, MAX_SEARCH_VARIANTS),
+      roomOrSpace: room,
+      style,
+      budgetMin: null,
+      budgetMax: budget.amount || structuredIntent?.budgetMax || null,
+      wantsMoreOptions,
+      wantsCheaperOptions,
+      wantsLuxuryOptions,
+      wantsDifferentCategory: Boolean(previousCategory && categoryLabels[0] !== previousCategory),
+      clarifyingQuestion: "",
+      action: "search_products",
+      source: "fallback",
+    };
+  }
+
+  if (isFollowUp) {
+    return {
+      messageType: "follow_up_refinement",
+      isFollowUp: true,
+      shouldReusePreviousContext: true,
+      resetPreviousProductContext: false,
+      activeCategory: previousCategory,
+      searchTerms: unique([
+        ...(previousCategory ? getProductCategorySearchKeywords(normalizeCategoryKeys([previousCategory])) : []),
+        ...(structuredIntent?.searchTerms || []),
+        message,
+      ]).slice(0, MAX_SEARCH_VARIANTS),
+      roomOrSpace: room || memory?.room || "",
+      style,
+      budgetMin: null,
+      budgetMax: budget.amount || structuredIntent?.budgetMax || null,
+      wantsMoreOptions,
+      wantsCheaperOptions,
+      wantsLuxuryOptions,
+      wantsDifferentCategory: false,
+      clarifyingQuestion: "",
+      action: "search_more_products",
+      source: "fallback",
+    };
+  }
+
+  if (budgetRequest || room || style.length) {
+    return {
+      messageType: budgetRequest ? "budget_request" : "room_styling",
+      isFollowUp: false,
+      shouldReusePreviousContext: false,
+      resetPreviousProductContext: true,
+      activeCategory: "",
+      searchTerms: unique([
+        ...(structuredIntent?.searchTerms || []),
+        ...(room ? SPACE_SEARCH_TERMS[room] || [] : []),
+        ...(budgetRequest ? ["decor", "diffuser", "frame", "flower", "plant", "mirror"] : []),
+        message,
+      ]).slice(0, MAX_SEARCH_VARIANTS),
+      roomOrSpace: room,
+      style,
+      budgetMin: null,
+      budgetMax: budget.amount || structuredIntent?.budgetMax || null,
+      wantsMoreOptions,
+      wantsCheaperOptions,
+      wantsLuxuryOptions,
+      wantsDifferentCategory: false,
+      clarifyingQuestion: "",
+      action: "search_products",
+      source: "fallback",
+    };
+  }
+
+  return {
+    messageType: "unclear",
+    isFollowUp: false,
+    shouldReusePreviousContext: false,
+    resetPreviousProductContext: true,
+    activeCategory: "",
+    searchTerms: [],
+    roomOrSpace: "",
+    style: [],
+    budgetMin: null,
+    budgetMax: null,
+    wantsMoreOptions: false,
+    wantsCheaperOptions: false,
+    wantsLuxuryOptions: false,
+    wantsDifferentCategory: false,
+    clarifyingQuestion:
+      "What room or decor category should I help you with first?",
+    action: "ask_clarifying_question",
+    source: "fallback",
+  };
+}
+
+function sanitizeCommerceDecision(parsed, fallback) {
+  if (!parsed || typeof parsed !== "object") {
+    return fallback;
+  }
+
+  if (
+    ["greeting", "capability_question", "order_help", "delivery_help", "payment_help", "return_policy"].includes(
+      fallback.messageType
+    ) ||
+    (fallback.activeCategory && fallback.resetPreviousProductContext)
+  ) {
+    return fallback;
+  }
+
+  const activeCategory = normalizeCategoryLabels([parsed.activeCategory])[0] || "";
+  const action = normalizeDecisionAction(parsed.action, fallback.action);
+  const messageType = normalizeMessageType(parsed.messageType, fallback.messageType);
+
+  return {
+    messageType,
+    isFollowUp: Boolean(parsed.isFollowUp),
+    shouldReusePreviousContext:
+      Boolean(parsed.shouldReusePreviousContext) &&
+      !["greeting", "capability_question", "order_help", "delivery_help", "payment_help", "return_policy"].includes(messageType),
+    resetPreviousProductContext:
+      Boolean(parsed.resetPreviousProductContext) ||
+      ["greeting", "capability_question", "order_help", "delivery_help", "payment_help", "return_policy"].includes(messageType),
+    activeCategory,
+    searchTerms: Array.isArray(parsed.searchTerms)
+      ? unique(parsed.searchTerms.map((term) => String(term || "").trim())).slice(0, MAX_SEARCH_VARIANTS)
+      : fallback.searchTerms,
+    roomOrSpace: normalizeText(parsed.roomOrSpace || fallback.roomOrSpace),
+    style: Array.isArray(parsed.style)
+      ? unique(parsed.style.map((item) => normalizeText(item))).slice(0, 3)
+      : fallback.style,
+    budgetMin: parseBudgetAmount(parsed.budgetMin) || fallback.budgetMin,
+    budgetMax: parseBudgetAmount(parsed.budgetMax) || fallback.budgetMax,
+    wantsMoreOptions: Boolean(parsed.wantsMoreOptions),
+    wantsCheaperOptions: Boolean(parsed.wantsCheaperOptions),
+    wantsLuxuryOptions: Boolean(parsed.wantsLuxuryOptions),
+    wantsDifferentCategory: Boolean(parsed.wantsDifferentCategory),
+    clarifyingQuestion:
+      typeof parsed.clarifyingQuestion === "string"
+        ? parsed.clarifyingQuestion.slice(0, 160)
+        : fallback.clarifyingQuestion,
+    action,
+    source: "gemini",
+  };
+}
+
+function buildDecisionPrompt({ message, history, memory, structuredIntent }) {
+  return JSON.stringify({
+    customerMessage: message,
+    recentConversation: history,
+    previousProductCards: previousAssistantProducts(history).map((product) => ({
+      href: product.href,
+      title: product.title,
+    })),
+    knownPreferences: {
+      room: memory.room || "",
+      budgetLabel: memory.budgetLabel || "",
+      style: memory.style || "",
+      categories: memory.categories || [],
+    },
+    preliminaryIntent: structuredIntent,
+  });
+}
+
 function normalizeGeminiReply(parsed, products, intentType) {
   const allowedProductHrefs = new Set(products.map((product) => product.href));
   const selectedProductHrefs = Array.isArray(parsed?.productHrefs)
-    ? parsed.productHrefs.filter((href) => allowedProductHrefs.has(href))
+    ? unique(parsed.productHrefs.filter((href) => allowedProductHrefs.has(href)))
     : [];
   let selectedProducts = selectedProductHrefs.length
     ? products.filter((product) => selectedProductHrefs.includes(product.href))
@@ -606,6 +998,7 @@ function normalizeGeminiReply(parsed, products, intentType) {
       ...products.filter((product) => !selectedHrefs.has(product.href)),
     ].slice(0, MAX_PRODUCT_CONTEXT);
   }
+  selectedProducts = dedupeProducts(selectedProducts).slice(0, MAX_PRODUCT_CONTEXT);
   const safeCtas = Array.isArray(parsed?.ctas)
     ? parsed.ctas
         .filter((cta) => cta?.label && ["/shop", "whatsapp"].includes(cta?.href))
@@ -733,6 +1126,191 @@ async function parseCustomerIntent({ message, history, memory, assistantIntent }
   return structuredIntent;
 }
 
+async function parseCommerceDecision({
+  message,
+  history,
+  memory,
+  structuredIntent,
+}) {
+  const fallbackDecision = createFallbackCommerceDecision({
+    message,
+    memory,
+    history,
+    structuredIntent,
+  });
+  const geminiResult = await callGeminiJson({
+    prompt: buildDecisionPrompt({ message, history, memory, structuredIntent }),
+    systemInstruction: DECISION_SYSTEM_INSTRUCTION,
+    maxOutputTokens: 360,
+  });
+
+  if (!geminiResult?.parsed) {
+    logDecisionParse("fallback", {
+      reason: geminiResult?.reason || "invalid_json",
+      messageType: fallbackDecision.messageType,
+      action: fallbackDecision.action,
+    });
+    return fallbackDecision;
+  }
+
+  const decision = sanitizeCommerceDecision(geminiResult.parsed, fallbackDecision);
+
+  logDecisionParse("success", {
+    messageType: decision.messageType,
+    action: decision.action,
+    shouldReusePreviousContext: decision.shouldReusePreviousContext,
+    activeCategory: decision.activeCategory,
+  });
+
+  return decision;
+}
+
+function mergeDecisionIntoStructuredIntent(structuredIntent, decision, memory) {
+  const shouldReuse = decision.shouldReusePreviousContext;
+  const categoryLabels = normalizeCategoryLabels(
+    unique([
+      ...(decision.activeCategory ? [decision.activeCategory] : []),
+      ...(shouldReuse && memory?.categories?.length ? memory.categories : []),
+      ...(decision.resetPreviousProductContext ? [] : structuredIntent.categories || []),
+    ])
+  );
+  const roomOrSpace = decision.roomOrSpace || (shouldReuse ? memory?.room : "");
+  const budgetMax = decision.budgetMax || (shouldReuse ? memory?.budget : null);
+  const style = unique([
+    ...(decision.style || []),
+    ...(shouldReuse && memory?.style ? [memory.style] : []),
+  ]);
+  const categoryTerms = getProductCategorySearchKeywords(
+    normalizeCategoryKeys(categoryLabels)
+  );
+  const roomTerms = roomOrSpace ? SPACE_SEARCH_TERMS[roomOrSpace] || [] : [];
+  const budgetTerms =
+    decision.messageType === "budget_request" || decision.wantsCheaperOptions
+      ? ["decor", "diffuser", "frame", "flower", "plant", "mirror"]
+      : [];
+
+  return {
+    ...structuredIntent,
+    intentType:
+      ["category_search", "product_search"].includes(decision.messageType)
+        ? "product_search"
+        : ["room_styling", "budget_request", "follow_up_refinement"].includes(
+              decision.messageType
+            )
+          ? "styling_advice"
+          : structuredIntent.intentType,
+    searchTerms: unique([
+      ...(decision.searchTerms || []),
+      ...categoryTerms,
+      ...roomTerms,
+      ...budgetTerms,
+      ...(decision.shouldReusePreviousContext ? structuredIntent.searchTerms || [] : []),
+    ]).slice(0, MAX_SEARCH_VARIANTS),
+    categories: categoryLabels,
+    spaces: roomOrSpace ? [roomOrSpace] : [],
+    style,
+    budgetMax: budgetMax || structuredIntent.budgetMax || null,
+    budgetMin: decision.budgetMin || structuredIntent.budgetMin || null,
+    needsClarification: decision.action === "ask_clarifying_question",
+    clarifyingQuestion:
+      decision.clarifyingQuestion || structuredIntent.clarifyingQuestion || "",
+  };
+}
+
+function memoryForDecision(memory, decision) {
+  if (!decision.resetPreviousProductContext) {
+    return memory;
+  }
+
+  return {
+    ...memory,
+    categories: decision.activeCategory
+      ? normalizeCategoryKeys([decision.activeCategory])
+      : [],
+  };
+}
+
+function buildDirectReply(decision) {
+  if (decision.messageType === "greeting") {
+    return {
+      text: "Hello. I can help you find decor products, style a room, plan around your budget, or explain ordering and delivery.",
+      ctas: defaultCtas("fallback"),
+      source: "fallback",
+      intentSource: decision.source,
+    };
+  }
+
+  if (decision.messageType === "capability_question") {
+    return {
+      text: "I can recommend Eleos Decor products, suggest room styling ideas, work with your budget, find catalogue items by category, explain ordering and delivery, and connect you to WhatsApp for final confirmation.",
+      ctas: defaultCtas("fallback"),
+      source: "fallback",
+      intentSource: decision.source,
+    };
+  }
+
+  if (decision.messageType === "delivery_help") {
+    return {
+      text: "Eleos Decor confirms delivery details on WhatsApp after you choose your items. Share your location there so the team can confirm availability, delivery options, and final costs.",
+      ctas: [{ label: "Continue on WhatsApp", href: WHATSAPP_URL }],
+      source: "fallback",
+      intentSource: decision.source,
+    };
+  }
+
+  if (decision.messageType === "order_help") {
+    return {
+      text: "To order, open the product you like, add it to your cart or wishlist, then continue on WhatsApp. Eleos Decor will confirm availability, payment, delivery details, and the final order directly with you.",
+      ctas: [
+        { label: "Browse Shop", href: "/shop" },
+        { label: "Continue on WhatsApp", href: WHATSAPP_URL },
+      ],
+      source: "fallback",
+      intentSource: decision.source,
+    };
+  }
+
+  if (decision.messageType === "payment_help") {
+    return {
+      text: "Payment is confirmed with the Eleos Decor team on WhatsApp. Choose your products first, then continue on WhatsApp for final availability, payment, and delivery confirmation.",
+      ctas: [{ label: "Continue on WhatsApp", href: WHATSAPP_URL }],
+      source: "fallback",
+      intentSource: decision.source,
+    };
+  }
+
+  if (decision.messageType === "return_policy") {
+    return {
+      text: "For returns or exchanges, please contact Eleos Decor on WhatsApp with your order details so the team can review the item and guide you on the next step.",
+      ctas: [{ label: "Continue on WhatsApp", href: WHATSAPP_URL }],
+      source: "fallback",
+      intentSource: decision.source,
+    };
+  }
+
+  if (decision.messageType === "complaint") {
+    return {
+      text: "I’m sorry about that. Please continue on WhatsApp so the Eleos Decor team can review the issue and help you properly.",
+      ctas: [{ label: "Continue on WhatsApp", href: WHATSAPP_URL }],
+      source: "fallback",
+      intentSource: decision.source,
+    };
+  }
+
+  return null;
+}
+
+function buildClarifyingReply(decision) {
+  return {
+    text:
+      decision.clarifyingQuestion ||
+      "What room or decor category should I help you with first? Popular options include frames, clocks, flowers, rugs, lamps, mirrors, and diffusers.",
+    ctas: defaultCtas("fallback"),
+    source: "fallback",
+    intentSource: decision.source,
+  };
+}
+
 function getSearchVariants(structuredIntent, message) {
   const categoryKeys = normalizeCategoryKeys(structuredIntent.categories);
   const spaces = structuredIntent.spaces || [];
@@ -755,7 +1333,12 @@ function dedupeProducts(products = []) {
   const seen = new Set();
 
   return products.filter((product) => {
-    const key = product?.id || `${product?.title}-${product?.category}`;
+    const key =
+      product?.id ||
+      product?.product_id ||
+      product?.productId ||
+      product?.href ||
+      `${product?.title}-${product?.category}-${product?.price}`;
 
     if (!key || seen.has(key)) {
       return false;
@@ -923,6 +1506,9 @@ async function searchProductsForStructuredIntent(supabase, structuredIntent, mes
       assistantReason: product?.assistantReason || buildProductReason(product, structuredIntent),
     }))
     .map(normalizeAssistantProduct);
+  const safeProducts = dedupeProducts(finalProducts).filter(
+    (product) => product.href && product.href !== "/product/undefined"
+  );
 
   logProductSearch({
     intentSource: structuredIntent.source,
@@ -931,14 +1517,31 @@ async function searchProductsForStructuredIntent(supabase, structuredIntent, mes
     variants: variants.map((variant) =>
       variant === message ? "[raw message fallback]" : variant
     ),
-    resultCount: finalProducts.length,
+    resultCount: safeProducts.length,
     failedVariantCount,
   });
+  logChatbotDebug("api products returned", safeProducts);
 
   return {
-    products: finalProducts,
+    products: safeProducts,
     variants,
   };
+}
+
+function rotatePreviousProductsToEnd(products = [], previousProductHrefs = []) {
+  if (!previousProductHrefs.length) {
+    return products;
+  }
+
+  const previousHrefs = new Set(previousProductHrefs);
+  const freshProducts = products.filter(
+    (product) => !previousHrefs.has(product.href)
+  );
+  const repeatedProducts = products.filter((product) =>
+    previousHrefs.has(product.href)
+  );
+
+  return [...freshProducts, ...repeatedProducts].slice(0, MAX_PRODUCT_CONTEXT);
 }
 
 export async function POST(request) {
@@ -950,6 +1553,13 @@ export async function POST(request) {
   }
 
   const history = sanitizeHistory(body?.messages);
+  const previousProductHrefs = Array.isArray(body?.previousProductHrefs)
+    ? unique(
+        body.previousProductHrefs
+          .map((href) => String(href || "").trim())
+          .filter((href) => href.startsWith("/product/"))
+      ).slice(0, MAX_PRODUCT_CONTEXT)
+    : [];
   const currentMemory =
     body?.memory && typeof body.memory === "object" ? body.memory : {};
   const { memory, extracted } = updateConversationMemory(currentMemory, message);
@@ -968,25 +1578,67 @@ export async function POST(request) {
     });
   }
 
-  const structuredIntent = await parseCustomerIntent({
+  let structuredIntent = await parseCustomerIntent({
     message,
     history,
     memory,
     assistantIntent: intent,
   });
+  const decision = await parseCommerceDecision({
+    message,
+    history,
+    memory,
+    structuredIntent,
+  });
+  structuredIntent = mergeDecisionIntoStructuredIntent(
+    structuredIntent,
+    decision,
+    memory
+  );
+  const responseMemory = memoryForDecision(memory, decision);
+  const directReply = buildDirectReply(decision);
 
-  const missingStep = getMissingConsultationStep(memory);
+  if (directReply && decision.action === "answer_directly") {
+    return json({
+      memory: responseMemory,
+      reply: directReply,
+    });
+  }
+
+  if (decision.action === "guide_to_whatsapp") {
+    return json({
+      memory: responseMemory,
+      reply: directReply || {
+        text: "Please continue on WhatsApp so the Eleos Decor team can confirm the details properly.",
+        ctas: [{ label: "Continue on WhatsApp", href: WHATSAPP_URL }],
+        source: "fallback",
+        intentSource: decision.source,
+      },
+    });
+  }
+
+  if (decision.action === "ask_clarifying_question") {
+    return json({
+      memory: responseMemory,
+      reply: buildClarifyingReply(decision),
+    });
+  }
+
+  const missingStep = getMissingConsultationStep(responseMemory);
   const shouldRecommendNow =
+    ["search_products", "search_more_products"].includes(decision.action) ||
     intent.type === "budget_guidance" ||
     intent.type === "room_styling" ||
-    (extracted.hasOverrideIntent && (memory.room || memory.budget || memory.style));
+    (extracted.hasOverrideIntent &&
+      (responseMemory.room || responseMemory.budget || responseMemory.style));
 
   const shouldUseRuleBasedConsultationPrompt =
     ["decor_consultation", "room_styling", "budget_guidance"].includes(
       intent.type
     ) &&
     missingStep !== "ready" &&
-    !shouldRecommendNow;
+    !shouldRecommendNow &&
+    decision.action !== "search_products";
 
   try {
     const supabase = await createClient();
@@ -998,9 +1650,8 @@ export async function POST(request) {
       structuredIntent.spaces?.length > 0;
 
     if (
-      ["product_search", "styling_advice"].includes(
-        structuredIntent.intentType
-      ) ||
+      ["search_products", "search_more_products"].includes(decision.action) ||
+      ["product_search", "styling_advice"].includes(structuredIntent.intentType) ||
       ["product_search", "room_styling", "budget_guidance"].includes(
         intent.type
       ) ||
@@ -1014,7 +1665,9 @@ export async function POST(request) {
         structuredIntent,
         message
       );
-      products = result.products;
+      products = decision.action === "search_more_products" || isMoreOptionsRequest(message)
+        ? rotatePreviousProductsToEnd(result.products, previousProductHrefs)
+        : result.products;
       if (!products.length) {
         noMatchMessage = `No exact ${structuredIntent.categories?.join(", ") || "decor product"} match was found in Supabase.`;
       }
@@ -1027,7 +1680,7 @@ export async function POST(request) {
       products.length === 0
     ) {
       try {
-        const recommendation = await buildRecommendation(supabase, memory);
+        const recommendation = await buildRecommendation(supabase, responseMemory);
         products = recommendation.products || [];
       } catch {
         products = [];
@@ -1045,8 +1698,9 @@ export async function POST(request) {
         200,
         { productCount: products.length },
         {
-          memory,
+          memory: responseMemory,
           intentSource: structuredIntent.source,
+          decisionSource: decision.source,
           foundProductCount: products.length,
           foundProducts: normalizeProductContext(products),
           fallbackText: buildFallbackTextFromProducts(products, structuredIntent),
@@ -1059,7 +1713,7 @@ export async function POST(request) {
       prompt: buildGeminiPrompt({
         message,
         history,
-        memory,
+        memory: responseMemory,
         intent,
         structuredIntent,
         products,
@@ -1075,8 +1729,9 @@ export async function POST(request) {
         200,
         geminiResult?.details || {},
         {
-          memory,
+          memory: responseMemory,
           intentSource: structuredIntent.source,
+          decisionSource: decision.source,
           foundProductCount: products.length,
           foundProducts: normalizeProductContext(products),
           fallbackText: buildFallbackTextFromProducts(products, structuredIntent),
@@ -1093,7 +1748,7 @@ export async function POST(request) {
     const reply = normalizeGeminiReply(parsed, products, intent.type);
 
     return json({
-      memory,
+      memory: responseMemory,
       reply: {
         ...reply,
         intentSource: structuredIntent.source,

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { FaWhatsapp } from "react-icons/fa";
 import ProductSuggestionCard from "./ProductSuggestionCard";
 
@@ -38,6 +39,24 @@ export default function MessageBubble({ message, onOptionSelect, isThinking }) {
     CHATBOT_DEBUG_ENABLED && message.role === "assistant"
       ? [sourceLabel, intentLabel].filter(Boolean).join(" · ")
       : "";
+
+  useEffect(() => {
+    if (
+      !CHATBOT_DEBUG_ENABLED ||
+      message.role !== "assistant" ||
+      !message.products?.length
+    ) {
+      return;
+    }
+
+    console.debug("Chatbot debug: cards rendered", {
+      productCount: message.products.length,
+      products: message.products.map((product) => ({
+        href: product.href,
+        title: product.title,
+      })),
+    });
+  }, [message]);
 
   return (
     <>

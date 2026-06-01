@@ -32,8 +32,27 @@ import AssistantPanel from "./AssistantPanel";
 const DEFAULT_MESSAGES = [WELCOME_MESSAGE];
 const ASSISTANT_BUTTON_MARGIN = 12;
 const ASSISTANT_BUTTON_GAP = 10;
+const CHATBOT_DEBUG_ENABLED =
+  process.env.NODE_ENV === "development" ||
+  process.env.NEXT_PUBLIC_CHATBOT_DEBUG === "true";
+
+function logChatbotClientDebug(label, products = []) {
+  if (!CHATBOT_DEBUG_ENABLED) {
+    return;
+  }
+
+  console.debug(`Chatbot debug: ${label}`, {
+    productCount: products.length,
+    products: products.map((product) => ({
+      href: product.href,
+      title: product.title,
+    })),
+  });
+}
 
 function createAssistantMessage(reply) {
+  logChatbotClientDebug("cards received by client message", reply.products || []);
+
   return {
     id: `assistant-${Date.now()}`,
     role: "assistant",
@@ -44,6 +63,13 @@ function createAssistantMessage(reply) {
 }
 
 async function requestGeminiReply({ message, memory, messages }) {
+  const previousProductHrefs =
+    [...messages]
+      .reverse()
+      .find((item) => item.role === "assistant" && item.products?.length)
+      ?.products?.map((product) => product.href)
+      .filter(Boolean) || [];
+
   const response = await fetch("/api/chatbot", {
     method: "POST",
     headers: {
@@ -54,8 +80,16 @@ async function requestGeminiReply({ message, memory, messages }) {
       memory,
       messages: messages
         .slice(-8)
-        .map(({ role, text }) => ({ role, text }))
+        .map(({ role, text, products }) => ({
+          role,
+          text,
+          products: products?.map((product) => ({
+            href: product.href,
+            title: product.title,
+          })),
+        }))
         .filter((item) => item.text),
+      previousProductHrefs,
     }),
   });
 
@@ -64,6 +98,10 @@ async function requestGeminiReply({ message, memory, messages }) {
   }
 
   const result = await response.json();
+  logChatbotClientDebug(
+    "api cards received by client",
+    result?.reply?.products || result?.foundProducts || []
+  );
 
   if (result?.useFallback && result?.foundProducts?.length > 0) {
     return {
