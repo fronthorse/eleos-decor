@@ -12,15 +12,12 @@ import {
   DEFAULT_OG_IMAGE,
   DEFAULT_SEO_DESCRIPTION,
   SITE_NAME,
-  absoluteUrl,
+  buildProductMerchantSchema,
   buildProductImageAlt,
-  buildProductReviewSchema,
   buildProductSeoDescription,
   buildProductSeoTitle,
   getProductAvailability,
-  getProductOfferMerchantSchema,
   getProductImage,
-  getProductSchemaImages,
   normalizePrice,
 } from "../../../lib/seo";
 import {
@@ -356,44 +353,22 @@ export default async function ProductDetails({ params }) {
     imageAlt: buildProductImageAlt(product),
   };
 
-  const productUrl = absoluteUrl(`/product/${product.id}`);
   const productDescription = buildProductSeoDescription(product);
-  const productImages = getProductSchemaImages(product);
   const productPrice = normalizePrice(product.price);
-  const productReviewSchema = buildProductReviewSchema(productReviews);
-  const productSchema = {
-    "@context": "https://schema.org",
-    "@type": "Product",
-    name: product.title,
-    description: productDescription,
-    image: productImages,
-    category: product.category,
-    brand: {
-      "@type": "Brand",
-      name: SITE_NAME,
-    },
-    url: productUrl,
-    offers: {
-      "@type": "Offer",
-      url: productUrl,
-      priceCurrency: "NGN",
-      availability: getProductAvailability(product),
-      ...(productPrice ? { price: productPrice } : {}),
-      ...getProductOfferMerchantSchema(),
-    },
-    ...productReviewSchema,
-  };
+  const productSchema = buildProductMerchantSchema(product, productReviews);
 
   return (
     <>
       <Navbar />
 
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(productSchema).replace(/</g, "\\u003c"),
-        }}
-      />
+      {productSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(productSchema).replace(/</g, "\\u003c"),
+          }}
+        />
+      )}
 
       <TrackRecentlyViewed product={product} />
 
@@ -416,6 +391,20 @@ export default async function ProductDetails({ params }) {
               product={productForExperience}
               variants={productVariants}
             />
+          </div>
+
+          <div className="visually-hidden">
+            <h2>{product.title}</h2>
+            <p>{productDescription}</p>
+            {product.category && <p>Category: {product.category}</p>}
+            {productPrice && <p>Price: NGN {productPrice}</p>}
+            <p>Brand: {SITE_NAME}</p>
+            <p>
+              Availability:{" "}
+              {getProductAvailability(product).endsWith("InStock")
+                ? "In stock"
+                : "Out of stock"}
+            </p>
           </div>
         </div>
       </section>
