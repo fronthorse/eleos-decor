@@ -150,20 +150,29 @@ Thank you for shopping with Eleos Decor ✨
       return;
     }
 
-    fetch("/api/send-inquiry-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        orderNumber,
-        customerName: customerName.trim(),
-        customerPhone: customerPhone.trim(),
-        customerEmail: finalEmail,
-        customerAddress: finalAddress,
-        items: cartItems,
-        totalAmount: cleanPrice(cartTotal),
-        orderNote,
-      }),
-    }).catch(() => {});
+    try {
+      const emailResponse = await fetch("/api/send-inquiry-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderNumber,
+          customerName: customerName.trim(),
+          customerPhone: customerPhone.trim(),
+          customerEmail: finalEmail,
+          customerAddress: finalAddress,
+          items: cartItems,
+          totalAmount: cleanPrice(cartTotal),
+          orderNote,
+        }),
+      });
+      const emailResult = await emailResponse.json();
+
+      if (!emailResponse.ok || !emailResult.success) {
+        console.error("Checkout inquiry email error:", emailResult.error);
+      }
+    } catch (error) {
+      console.error("Checkout inquiry email request failed:", error.message);
+    }
 
     window.open(
       `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(orderMessage)}`,

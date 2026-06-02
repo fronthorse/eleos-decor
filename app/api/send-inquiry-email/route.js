@@ -1,76 +1,90 @@
-import { Resend } from "resend";
-import { getCartVariantLabel } from "../../../lib/productVariants";
+import {
+  buildAdminOrderEmailHtml,
+  buildCustomerOrderEmailHtml,
+  createResendClient,
+  getResendEmailConfig,
+  jsonEmailEnvError,
+  logEmailError,
+} from "../../../lib/emailNotifications";
+
+export async function GET() {
+  return Response.json(
+    { success: false, error: "Method not allowed. Use POST." },
+    { status: 405 }
+  );
+}
 
 export async function POST(request) {
   try {
-    if (!process.env.RESEND_API_KEY) {
-      return Response.json(
-        { success: false, error: "Missing RESEND_API_KEY" },
-        { status: 500 }
-      );
+    const config = getResendEmailConfig();
+
+    if (config.missing.length > 0) {
+      console.error("[email:order] Missing required email env vars", {
+        missing: config.missing,
+      });
+      return jsonEmailEnvError(config.missing);
     }
 
-    if (!process.env.ADMIN_EMAIL) {
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
+      logEmailError("order-request-json", error);
       return Response.json(
-        { success: false, error: "Missing ADMIN_EMAIL" },
-        { status: 500 }
+        { success: false, error: "Invalid JSON request body." },
+        { status: 400 }
       );
     }
-
-    const resend = new Resend(process.env.RESEND_API_KEY);
-
-    const body = await request.json();
 
     const {
+      orderNumber,
       customerName,
       customerPhone,
       customerEmail,
+      customerAddress,
       items = [],
       totalAmount,
       orderNote,
     } = body;
 
-    const itemsHtml = items
-      .map((item) => {
-        const variantLabel = getCartVariantLabel(item);
+    if (!customerName || !customerPhone) {
+      return Response.json(
+        {
+          success: false,
+          error: "Missing required order fields: customerName and customerPhone.",
+        },
+        { status: 400 }
+      );
+    }
 
-        return `
-          <li>
-            <strong>${item.title}</strong><br />
-            ${variantLabel ? `Selected Print: ${variantLabel}<br />` : ""}
-            Quantity: ${item.quantity}<br />
-            Price: ₦${item.price}
-          </li>
-        `;
-      })
-      .join("");
+    const resend = createResendClient(config);
+    const order = {
+      orderNumber,
+      customerName,
+      customerPhone,
+      customerEmail,
+      customerAddress,
+      items,
+      totalAmount,
+      orderNote,
+    };
 
     const adminEmail = await resend.emails.send({
-      from: "Eleos Decor <onboarding@resend.dev>",
-      to: process.env.ADMIN_EMAIL,
-      subject: "New Checkout Inquiry - Eleos Decor",
-      html: `
-        <div style="font-family: sans-serif; line-height: 1.7;">
-          <h2>New Checkout Inquiry</h2>
-
-          <p><strong>Name:</strong> ${customerName}</p>
-          <p><strong>Phone:</strong> ${customerPhone}</p>
-          <p><strong>Email:</strong> ${customerEmail || "Guest customer"}</p>
-
-          <h3>Items</h3>
-          <ul>${itemsHtml}</ul>
-
-          <p><strong>Total:</strong> ₦${Number(totalAmount).toLocaleString()}</p>
-
-          <p><strong>Order Note:</strong> ${orderNote || "None"}</p>
-        </div>
-      `,
+      from: config.fromEmail,
+      to: config.toEmail,
+      subject: `New Checkout Inquiry - ${orderNumber || "Eleos Decor"}`,
+      html: buildAdminOrderEmailHtml(order),
     });
 
     if (adminEmail.error) {
+      logEmailError("order-admin-send", adminEmail.error, {
+        orderNumber,
+        recipientConfigured: Boolean(config.toEmail),
+        senderConfigured: Boolean(config.fromEmail),
+      });
       return Response.json(
-        { success: false, error: adminEmail.error },
-        { status: 400 }
+        { success: false, error: "Could not send admin order email." },
+        { status: 502 }
       );
     }
 
@@ -78,33 +92,18 @@ export async function POST(request) {
 
     if (customerEmail) {
       const customerEmailResult = await resend.emails.send({
-        from: "Eleos Decor <onboarding@resend.dev>",
+        from: config.fromEmail,
         to: customerEmail,
         subject: "We Received Your Inquiry - Eleos Decor",
-        html: `
-          <div style="font-family: sans-serif; line-height: 1.7;">
-            <h2>Thank You for Shopping with Eleos Decor</h2>
-
-            <p>Hello ${customerName},</p>
-
-            <p>We have received your checkout inquiry successfully.</p>
-
-            <p>
-              Our team will contact you shortly to confirm your order details and payment.
-            </p>
-
-            <h3>Order Summary</h3>
-            <ul>${itemsHtml}</ul>
-
-            <p><strong>Total:</strong> ₦${Number(totalAmount).toLocaleString()}</p>
-
-            <p>Thank you for choosing Eleos Decor.</p>
-          </div>
-        `,
+        html: buildCustomerOrderEmailHtml(order),
       });
 
       if (customerEmailResult.error) {
-        customerEmailStatus = customerEmailResult.error;
+        logEmailError("order-customer-send", customerEmailResult.error, {
+          orderNumber,
+          customerEmailProvided: true,
+        });
+        customerEmailStatus = "Customer email failed.";
       } else {
         customerEmailStatus = "Customer email sent.";
       }
@@ -116,8 +115,9 @@ export async function POST(request) {
       customerEmail: customerEmailStatus,
     });
   } catch (error) {
+    logEmailError("order-unhandled", error);
     return Response.json(
-      { success: false, error: error.message },
+      { success: false, error: "Unexpected email notification error." },
       { status: 500 }
     );
   }
