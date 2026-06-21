@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useMemo } from "react";
 import {
   getProductPreviewImageSrc,
+  shouldBypassNextImageOptimization,
   PRODUCT_IMAGE_FALLBACK,
 } from "../../lib/productImages";
 
@@ -33,6 +34,7 @@ export default function ProductVariantSelector({
       <div className="product-variant-options">
         {printVariants.map((variant) => {
           const active = selectedVariant?.id === variant.id;
+          const variantImage = getProductPreviewImageSrc(variant);
 
           return (
             <button
@@ -44,11 +46,12 @@ export default function ProductVariantSelector({
             >
               <span className="product-variant-thumb">
                 <Image
-                  src={getProductPreviewImageSrc(variant)}
+                  src={variantImage}
                   alt={variant.variant_label}
                   width={96}
                   height={96}
                   sizes="72px"
+                  unoptimized={shouldBypassNextImageOptimization(variantImage)}
                 />
               </span>
 

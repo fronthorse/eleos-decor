@@ -9,6 +9,7 @@ import EmptyState from "./EmptyState";
 import OrderRequestSent from "./OrderRequestSent";
 import {
   getProductPreviewImageSrc,
+  shouldBypassNextImageOptimization,
   PRODUCT_IMAGE_FALLBACK,
 } from "../../lib/productImages";
 import { getCartItemKey, getCartVariantLabel } from "../../lib/productVariants";
@@ -70,6 +71,7 @@ export default function MiniCartDrawer({ isOpen, onClose }) {
                 {cartItems.map((item) => {
                   const itemKey = item.cart_item_key || getCartItemKey(item);
                   const variantLabel = getCartVariantLabel(item);
+                  const previewImage = getProductPreviewImageSrc(item);
 
                   return (
                   <div
@@ -77,12 +79,13 @@ export default function MiniCartDrawer({ isOpen, onClose }) {
                     className="mini-cart-item d-flex gap-3 mb-4"
                   >
                     <Image
-                      src={getProductPreviewImageSrc(item)}
+                      src={previewImage}
                       alt={item.title}
                       width={72}
                       height={72}
                       sizes="72px"
                       loading="lazy"
+                      unoptimized={shouldBypassNextImageOptimization(previewImage)}
                       onError={handlePreviewImageError}
                     />
 

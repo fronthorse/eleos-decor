@@ -10,6 +10,7 @@ import OrderRequestSent from "../components/OrderRequestSent";
 import { useCart } from "../../context/CartContext";
 import {
   getProductPreviewImageSrc,
+  shouldBypassNextImageOptimization,
   PRODUCT_IMAGE_FALLBACK,
 } from "../../lib/productImages";
 import { getCartItemKey, getCartVariantLabel } from "../../lib/productVariants";
@@ -59,18 +60,20 @@ export default function CartPage() {
                 {cartItems.map((item) => {
                   const itemKey = item.cart_item_key || getCartItemKey(item);
                   const variantLabel = getCartVariantLabel(item);
+                  const previewImage = getProductPreviewImageSrc(item);
 
                   return (
                   <div key={itemKey} className="soft-card p-3 mb-4">
                     <div className="row align-items-center g-3">
                       <div className="col-md-3">
                         <Image
-                          src={getProductPreviewImageSrc(item)}
+                          src={previewImage}
                           alt={item.title}
                           width={220}
                           height={140}
                           sizes="(max-width: 767px) 100vw, 220px"
                           loading="lazy"
+                          unoptimized={shouldBypassNextImageOptimization(previewImage)}
                           className="img-fluid rounded"
                           onError={handlePreviewImageError}
                           style={{

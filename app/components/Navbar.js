@@ -9,7 +9,10 @@ import { createClient } from "../../lib/supabase/client";
 import { getSessionSafely } from "../../lib/supabase/auth";
 import { isAdminEmail } from "../../lib/adminAuth";
 import { shopNavigation } from "../../lib/navigationData";
-import { getProductPreviewImageSrc } from "../../lib/productImages";
+import {
+  getProductPreviewImageSrc,
+  shouldBypassNextImageOptimization,
+} from "../../lib/productImages";
 import MiniCartDrawer from "./MiniCartDrawer";
 import { useRouter } from "next/navigation";
 import {
@@ -50,6 +53,7 @@ export default function Navbar() {
   const isAdmin = isAdminEmail(user?.email);
   const featuredProduct =
     featuredProducts[featuredProductIndex] || FEATURED_PRODUCT_FALLBACK;
+  const featuredProductImage = getProductPreviewImageSrc(featuredProduct);
 
   const checkUser = useCallback(async () => {
     const { session } = await getSessionSafely(supabase);
@@ -296,11 +300,14 @@ export default function Navbar() {
                       >
                         <span className="mega-menu-feature-image">
                           <Image
-                            src={getProductPreviewImageSrc(featuredProduct)}
+                            src={featuredProductImage}
                             alt={featuredProduct.title}
                             width={220}
                             height={180}
                             sizes="220px"
+                            unoptimized={shouldBypassNextImageOptimization(
+                              featuredProductImage
+                            )}
                           />
                         </span>
 

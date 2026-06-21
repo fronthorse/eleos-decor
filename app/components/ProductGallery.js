@@ -5,6 +5,7 @@ import Image from "next/image";
 import {
   getProductDetailImageSrc,
   getProductPreviewImageSrc,
+  shouldBypassNextImageOptimization,
   PRODUCT_IMAGE_FALLBACK,
 } from "../../lib/productImages";
 
@@ -93,6 +94,7 @@ export default function ProductGallery({ mainImage, galleryImages = [], title })
             height={700}
             priority={activeIndex === 0}
             sizes="(max-width: 768px) 100vw, 50vw"
+            unoptimized={shouldBypassNextImageOptimization(displayImage)}
             onClick={() => setZoomOpen(true)}
             onLoad={() => setImageLoading(false)}
             onError={() => handleImageError(activeImage)}
@@ -150,6 +152,7 @@ export default function ProductGallery({ mainImage, galleryImages = [], title })
                     height={120}
                     loading="lazy"
                     sizes="82px"
+                    unoptimized={shouldBypassNextImageOptimization(thumbImage)}
                     onError={() => handleImageError(image)}
                   />
                 </button>
@@ -174,6 +177,7 @@ export default function ProductGallery({ mainImage, galleryImages = [], title })
             width={1200}
             height={1200}
             sizes="95vw"
+            unoptimized={shouldBypassNextImageOptimization(displayImage)}
             className="image-zoom-full"
             onError={() => handleImageError(activeImage)}
           />

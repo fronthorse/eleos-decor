@@ -2,7 +2,10 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import { PRODUCT_IMAGE_FALLBACK } from "@/lib/productImages";
+import {
+  PRODUCT_IMAGE_FALLBACK,
+  shouldBypassNextImageOptimization,
+} from "@/lib/productImages";
 
 export default function ProductSuggestionCard({ product }) {
   const [imageSrc, setImageSrc] = useState(
@@ -16,6 +19,7 @@ export default function ProductSuggestionCard({ product }) {
         alt={product.title}
         width={58}
         height={58}
+        unoptimized={shouldBypassNextImageOptimization(imageSrc)}
         onError={() => setImageSrc(PRODUCT_IMAGE_FALLBACK)}
         className="ai-assistant-product-image"
       />

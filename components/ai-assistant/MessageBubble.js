@@ -32,6 +32,15 @@ function getIntentLabel(intentSource) {
   return "";
 }
 
+function getProductCardKey(messageId, product, index) {
+  const productKey =
+    product?.href ||
+    product?.id ||
+    [product?.title, product?.category, product?.price].filter(Boolean).join("-");
+
+  return `${messageId}-${productKey || "product"}-${index}`;
+}
+
 export default function MessageBubble({ message, onOptionSelect, isThinking }) {
   const sourceLabel = getDebugLabel(message.source);
   const intentLabel = getIntentLabel(message.intentSource);
@@ -65,9 +74,9 @@ export default function MessageBubble({ message, onOptionSelect, isThinking }) {
 
         {message.products?.length > 0 && (
           <div className="ai-assistant-products">
-            {message.products.map((product) => (
+            {message.products.map((product, index) => (
               <ProductSuggestionCard
-                key={`${message.id}-${product.href}-${product.title}`}
+                key={getProductCardKey(message.id, product, index)}
                 product={product}
               />
             ))}

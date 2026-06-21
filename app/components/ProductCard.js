@@ -12,6 +12,7 @@ import {
   getProductPreviewImageSrc,
   getProductBalancedCardImageSrc,
   getProductCardImageSrc,
+  shouldBypassNextImageOptimization,
   PRODUCT_IMAGE_FALLBACK,
 } from "../../lib/productImages";
 import { buildProductImageAlt } from "../../lib/seo";
@@ -53,6 +54,7 @@ function ProductCard({
     : getProductCardImageSrc(image, thumbnailImage);
   const imageSrc =
     optimizedImage && !imageFailed ? optimizedImage : PRODUCT_IMAGE_FALLBACK;
+  const bypassImageOptimization = shouldBypassNextImageOptimization(imageSrc);
   const imageAlt = buildProductImageAlt({ title, category });
 
   useEffect(() => {
@@ -127,6 +129,7 @@ function ProductCard({
               height={512}
               loading="lazy"
               sizes="(max-width: 575px) 50vw, (max-width: 991px) 33vw, 25vw"
+              unoptimized={bypassImageOptimization}
               onError={() => setImageFailed(true)}
             />
           </div>

@@ -50,8 +50,33 @@ function logChatbotClientDebug(label, products = []) {
   });
 }
 
+function getAssistantProductKey(product) {
+  return (
+    product?.href ||
+    product?.id ||
+    [product?.title, product?.category, product?.price].filter(Boolean).join("-")
+  );
+}
+
+function uniqueAssistantProducts(products = []) {
+  const seen = new Set();
+
+  return products.filter((product) => {
+    const key = getAssistantProductKey(product);
+
+    if (!key || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
 function createAssistantMessage(reply) {
-  logChatbotClientDebug("cards received by client message", reply.products || []);
+  const products = uniqueAssistantProducts(reply.products || []);
+
+  logChatbotClientDebug("cards received by client message", products);
 
   return {
     id: `assistant-${Date.now()}`,
@@ -59,6 +84,7 @@ function createAssistantMessage(reply) {
     source: reply.source || "fallback",
     intentSource: reply.intentSource || "fallback",
     ...withResolvedCtas(reply),
+    products,
   };
 }
 

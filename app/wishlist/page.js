@@ -8,7 +8,10 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import EmptyState from "../components/EmptyState";
 import { useWishlist } from "../../context/WishlistContext";
-import { PRODUCT_IMAGE_FALLBACK } from "../../lib/productImages";
+import {
+  PRODUCT_IMAGE_FALLBACK,
+  shouldBypassNextImageOptimization,
+} from "../../lib/productImages";
 
 function formatPrice(price) {
   return price ? `\u20a6${price}` : "Price on request";
@@ -49,42 +52,48 @@ export default function WishlistPage() {
             />
           ) : (
             <div className="wishlist-grid">
-              {wishlistItems.map((item) => (
-                <article className="wishlist-item-card" key={item.id}>
-                  <Link href={item.href} className="wishlist-item-image-link">
-                    <Image
-                      src={item.imageSrc || item.image_url || PRODUCT_IMAGE_FALLBACK}
-                      alt={item.title}
-                      width={420}
-                      height={336}
-                      className="wishlist-item-image"
-                    />
-                  </Link>
+              {wishlistItems.map((item) => {
+                const wishlistImage =
+                  item.imageSrc || item.image_url || PRODUCT_IMAGE_FALLBACK;
 
-                  <div className="wishlist-item-copy">
-                    {item.category && (
-                      <p className="wishlist-item-category">{item.category}</p>
-                    )}
+                return (
+                  <article className="wishlist-item-card" key={item.id}>
+                    <Link href={item.href} className="wishlist-item-image-link">
+                      <Image
+                        src={wishlistImage}
+                        alt={item.title}
+                        width={420}
+                        height={336}
+                        unoptimized={shouldBypassNextImageOptimization(wishlistImage)}
+                        className="wishlist-item-image"
+                      />
+                    </Link>
 
-                    <h2>{item.title}</h2>
-                    <p className="wishlist-item-price">{formatPrice(item.price)}</p>
+                    <div className="wishlist-item-copy">
+                      {item.category && (
+                        <p className="wishlist-item-category">{item.category}</p>
+                      )}
 
-                    <div className="wishlist-item-actions">
-                      <Link href={item.href} className="btn btn-dark">
-                        View Product
-                      </Link>
+                      <h2>{item.title}</h2>
+                      <p className="wishlist-item-price">{formatPrice(item.price)}</p>
 
-                      <button
-                        type="button"
-                        className="btn btn-outline-dark"
-                        onClick={() => handleRemove(item.id)}
-                      >
-                        Remove
-                      </button>
+                      <div className="wishlist-item-actions">
+                        <Link href={item.href} className="btn btn-dark">
+                          View Product
+                        </Link>
+
+                        <button
+                          type="button"
+                          className="btn btn-outline-dark"
+                          onClick={() => handleRemove(item.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           )}
         </div>

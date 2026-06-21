@@ -16,6 +16,7 @@ import {
 } from "../../lib/orderStatuses";
 import {
   getProductPreviewImageSrc,
+  shouldBypassNextImageOptimization,
   PRODUCT_IMAGE_FALLBACK,
 } from "../../lib/productImages";
 import {
@@ -2053,15 +2054,19 @@ export default function AdminPage() {
 
                 {existingVariants.length > 0 && (
                   <div className="admin-existing-variants mb-3">
-                    {existingVariants.map((variant) => (
+                    {existingVariants.map((variant) => {
+                      const variantImage = getProductPreviewImageSrc(variant);
+
+                      return (
                       <div className="admin-existing-variant" key={variant.id}>
                         <Image
-                          src={getProductPreviewImageSrc(variant)}
+                          src={variantImage}
                           alt={variant.variant_label}
                           width={64}
                           height={64}
                           sizes="64px"
                           loading="lazy"
+                          unoptimized={shouldBypassNextImageOptimization(variantImage)}
                           onError={handlePreviewImageError}
                         />
 
@@ -2084,7 +2089,8 @@ export default function AdminPage() {
                           Remove
                         </button>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 
@@ -2655,17 +2661,19 @@ We are contacting you regarding your order.`;
               {productsLoaded && !productsLoading && products.map((product) => {
                 const imageCount = product.gallery_images?.length || 1;
                 const variantCount = productVariantCounts[product.id] || 0;
+                const previewImage = getProductPreviewImageSrc(product);
 
                 return (
                 <article className="admin-product-card" key={product.id}>
                   <div className="admin-product-thumb">
                     <Image
-                      src={getProductPreviewImageSrc(product)}
+                      src={previewImage}
                       alt={product.title}
                       width={96}
                       height={96}
                       sizes="96px"
                       loading="lazy"
+                      unoptimized={shouldBypassNextImageOptimization(previewImage)}
                       onError={handlePreviewImageError}
                     />
                   </div>

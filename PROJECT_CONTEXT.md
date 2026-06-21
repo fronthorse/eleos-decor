@@ -47,6 +47,9 @@ Target audience:
   - Database
   - Authentication
   - Storage
+- Resend
+  - Admin checkout inquiry email notifications
+  - Customer checkout inquiry confirmation emails
 
 ## Deployment
 - Vercel
@@ -125,6 +128,8 @@ Contains:
 - productSearch.js
 - productImages.js
 - orderStatuses.js
+- shopCuration.js for curated room/space and styled collection shop filters
+- emailNotifications.js for Resend-backed checkout inquiry email templates and safe email diagnostics
 - helper functions
 - utilities
 
@@ -160,7 +165,10 @@ Contains React Context providers such as:
 ## Store Features
 - Responsive homepage
 - Shop page with Supabase-side pagination, filtering, full-text search, and sorting
-- Shop URL params support page, category, search/query, and sort
+- Shop URL params support page, category, search/query, sort, room/space filters, and styled collection filters
+- Shop includes curated room/space filters from lib/shopCuration.js for Living Room, Bedroom, Dining Area, Office, Entryway, TV Console, and Cozy Corners
+- Shop includes styled collection filters from lib/shopCuration.js for Modern Luxury, Warm Minimalist, Cozy Apartment, and Neutral Elegance
+- Curated shop filters use weighted category tiers and style keyword scoring while preserving Supabase-side pagination
 - Navbar Shop navigation uses a premium mega menu on desktop and an accordion on mobile
 - Desktop Shop text is a real /shop link; hover/focus opens the mega menu, and a separate chevron icon button supports menu access for keyboard users
 - Mobile Shop text navigates to /shop; a separate toggle opens the shop accordion
@@ -180,12 +188,15 @@ Contains React Context providers such as:
 - Wall frame products support first-phase print variants through one canonical product page; variants are shown as "Choose Print" options such as Print A, Print B, and Print C rather than separate duplicate products
 - Shop/search/filter/pagination still operate on parent products only; do not fetch all variants globally or create duplicate shop/SEO entries per print
 - Public Return & Exchange Policy page exists at /return-policy and is linked from the footer
+- Public Privacy Policy page exists at /privacy and is linked from the footer
+- Public Terms & Conditions page exists at /terms and is linked from the footer
 
 ## Production SEO
 - SEO is implemented for the live domain https://eleosdecor.com using Next.js App Router metadata APIs
 - app/layout.js defines global metadataBase set to https://eleosdecor.com, title template, default description, keyword defaults, Open Graph defaults, Twitter/X card defaults, and index/follow defaults
-- Public page metadata/canonicals exist for homepage, shop, about, contact, and return-policy
+- Public page metadata/canonicals exist for homepage, shop, about, contact, privacy, terms, and return-policy
 - Return & Exchange Policy page is public and indexable at https://eleosdecor.com/return-policy for customer trust and future Google Merchant structured data references
+- Privacy Policy and Terms & Conditions pages are public and indexable at https://eleosdecor.com/privacy and https://eleosdecor.com/terms
 - Product detail pages generate dynamic metadata from Supabase products using products.title, description, image_url/gallery fallback, price, and availability
 - Product detail pages build unique SEO titles and descriptions with product title, category, Nigeria context, and price where available
 - Product detail pages include product canonical URLs, product Open Graph images, and descriptive product image alt text
@@ -201,7 +212,7 @@ Contains React Context providers such as:
 - Product pages include crawlable breadcrumbs, category links, room links, styled collection links, complete-the-look links, and similar product links to improve internal discovery
 - Missing product detail URLs should use Next.js notFound() so removed products return a real 404 instead of a soft 200 page
 - Product prices may be stored as formatted strings such as "500,000"; SEO helpers normalize them for metadata/schema without changing UI display
-- app/sitemap.js generates sitemap.xml with homepage, shop, about, contact, return-policy, category query URLs from product categories, room/collection shop URLs, and product detail URLs from Supabase
+- app/sitemap.js generates sitemap.xml with homepage, shop, about, contact, privacy, terms, return-policy, category query URLs from product categories, room/collection shop URLs, and product detail URLs from Supabase
 - Sitemap product fetching is paginated so it can include all products beyond a single 5000-row limit
 - Sitemap generation uses public Supabase anon access and products fields id, category, and created_at; products.updated_at is not currently part of the table
 - app/robots.js generates a simplified robots.txt with Allow: /, private-route Disallow rules, and Sitemap: https://eleosdecor.com/sitemap.xml
@@ -215,6 +226,8 @@ Contains React Context providers such as:
 - lib/seo.js stores production SEO constants and shared helpers, including Product review/aggregateRating JSON-LD helpers and merchant offer schema helpers for shipping and returns
 - lib/seo.js also stores product SEO title/description/image-alt helpers and product schema image helpers
 - app/layout.js defines global metadata and social preview defaults
+- app/privacy/page.js defines the public Privacy Policy page with SEO metadata and canonical URL
+- app/terms/page.js defines the public Terms & Conditions page with SEO metadata and canonical URL
 - app/return-policy/page.js defines the public Return & Exchange Policy page with SEO metadata and canonical URL
 - app/product/[id]/page.js defines dynamic product metadata and Product JSON-LD
 - app/sitemap.js generates sitemap.xml with static, category, room, collection, and product routes
@@ -245,7 +258,7 @@ Sitemap: https://eleosdecor.com/sitemap.xml
 - Google Search Console property has been set up for eleosdecor.com
 - Sitemap was submitted successfully
 - Google discovered 48 URLs from the sitemap at the time of setup
-- Sitemap includes homepage, shop, about, contact, return-policy, category URLs, and product detail URLs
+- Sitemap includes homepage, shop, about, contact, privacy, terms, return-policy, category URLs, room/collection shop URLs, and product detail URLs
 - Homepage and key pages may initially show "URL is not on Google" because indexing can take time for a new domain
 - Request Indexing should be used for homepage, shop, and important product pages
 
@@ -320,6 +333,9 @@ Sitemap: https://eleosdecor.com/sitemap.xml
 - Guest persistence uses localStorage scoped to guest
 - Logged-in persistence uses user-scoped localStorage plus Supabase table ai_chat_sessions
 - AI chat persistence must never share history between users; localStorage keys are scoped by guest/user id and old shared keys are removed
+- AI Decor Assistant UI is modularized under components/ai-assistant, including AssistantButton, AssistantPanel, MessageBubble, MessageList, ProductSuggestionCard, QuickActions, and TypingIndicator
+- AI Decor Assistant behavior/config is modularized under lib/ai-assistant, including assistantConfig, assistantIntents, assistantMemory, assistantProductSearch, assistantRecommendations, and assistantReplies
+- app/components/AIDecorAssistant.js remains the public route integration wrapper for the modular assistant
 - Latest live assistant tests passed for dining set, dinning typo, center tables, living room under 500k, modern bedroom, wall frames, rugs unavailable handling, TV console lamp, 1m budget, luxury style, bedroom follow-up, delivery, and order prompts
 - Live assistant tests verified product card categories, View Product links, strict dining/table/frame/rug/lamp relevance, no console errors, and mobile panel usability
 
@@ -340,6 +356,11 @@ Sitemap: https://eleosdecor.com/sitemap.xml
 - Order Request Sent includes Continue on WhatsApp, Return to Shop, and View My Orders for logged-in customers
 - Duplicate checkout submissions are prevented after a successful order request
 - Customer dashboard includes order tracking
+- Checkout inquiry email notifications are implemented through app/api/send-inquiry-email/route.js and lib/emailNotifications.js
+- Email notifications use Resend with RESEND_API_KEY, CONTACT_FROM_EMAIL, and CONTACT_TO_EMAIL server-side environment variables
+- Admin order emails include order number, customer details, delivery address, cart items, selected frame print labels, total amount, and order note
+- Customer confirmation emails are sent when a customer email is provided and summarize the received inquiry
+- Email notification failures are logged safely with summarized errors; raw secrets and full private diagnostics must not be logged
 
 ## Authentication
 - Supabase authentication
@@ -581,11 +602,9 @@ Potential future additions:
 - Delivery fee/location system
 - Later product variant phases for additional product types, variant inventory, dimensions/sizes, variant-specific thumbnails, and stricter admin-only RLS policies
 - Security/stability audit
-- Email notifications
 - Homepage trust/brand sections
-- Future OpenAI integration only after cost/planning decision
-- OpenAI-powered chatbot backend at app/api/chatbot/route.js if approved later
-- AI assistant product-aware recommendations with deeper inventory context if backend AI is approved later
+- Future AI enhancements should build on the existing Gemini-backed app/api/chatbot/route.js and product-aware assistant modules
+- AI assistant product-aware recommendations with deeper inventory context
 - Real thumbnail uploads with thumbnail_url column instead of relying only on Supabase runtime transforms
 - Saved addresses
 - Instagram feed integration
