@@ -8,6 +8,7 @@ import FloatingSupportWidgets from "./components/FloatingSupportWidgets";
 import { Toaster } from "react-hot-toast";
 import { WishlistProvider } from "../context/WishlistContext";
 import { RecentlyViewedProvider } from "../context/RecentlyViewedContext";
+import { Analytics } from "@vercel/analytics/next";
 import {
   DEFAULT_KEYWORDS,
   DEFAULT_OG_IMAGE,
@@ -114,6 +115,7 @@ export default function RootLayout({ children }) {
             },
           }}
         />
+        <Analytics />
       </body>
     </html>
   );
