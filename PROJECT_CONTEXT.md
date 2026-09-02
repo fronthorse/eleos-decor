@@ -53,6 +53,7 @@ Target audience:
 
 ## Deployment
 - Vercel
+- Vercel Web Analytics
 - Final production domain: https://eleosdecor.com
 - Domain was purchased from WhoGoHost
 - Domain is connected to Vercel
@@ -92,6 +93,10 @@ Target audience:
   - Admin product editor now has a premium two-column desktop layout, sticky live preview, inline collapsible variant cards, duplicate/add/reorder/collapse controls, image preview grids, and mobile-safe stacking
   - Live Chrome Playwright tests passed for desktop and 360/390/414/768px mobile widths with no horizontal overflow or console errors
   - Live save/upload test created and deleted temporary simple and frame products; /api/admin/products and /api/admin/product-variants returned 200, and product detail variant rendering was verified
+- Vercel Web Analytics is added on GitHub main and synced locally
+  - Commit: fff4492 Add Vercel Web Analytics
+  - app/layout.js imports and renders Analytics from @vercel/analytics/next
+  - package.json includes @vercel/analytics
 
 ---
 
@@ -273,6 +278,7 @@ Sitemap: https://eleosdecor.com/sitemap.xml
 - Product full-text search RPC/search_vector is in place
 - Product thumbnails and Supabase image transformations are improved for product cards and previews
 - Product detail/gallery images use Next Image optimization and lazy-loaded thumbnails
+- Vercel Web Analytics is enabled globally through app/layout.js
 - Admin analytics RPC exists through get_admin_analytics, with app-level fallback count queries
 - robots/sitemap build passes with Next.js App Router
 
@@ -538,6 +544,7 @@ Performance index SQL:
 - Mobile public UI polish is fixed in production
 - AI Decor Assistant intelligence upgrade is fixed in production
 - Admin product upload/edit UX refinement is fixed in production
+- Vercel Web Analytics is present locally from GitHub main at commit fff4492
 - Do not rewrite these stable systems unless a new production test identifies a concrete regression
 - Keep future changes focused and backed by automated evidence
 
