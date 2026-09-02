@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 import { getSessionSafely } from "../../lib/supabase/auth";
 import { useCart } from "../../context/CartContext";
@@ -33,6 +33,7 @@ export default function CheckoutForm({
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedOrderNumber, setSubmittedOrderNumber] = useState("");
+  const submissionInFlightRef = useRef(false);
 
   const whatsappNumber = "2348168350533";
 
@@ -68,7 +69,7 @@ export default function CheckoutForm({
   }, []);
 
   async function handleCheckout() {
-    if (isSubmitting || submittedOrderNumber) {
+    if (submissionInFlightRef.current || isSubmitting || submittedOrderNumber) {
       return;
     }
 
@@ -86,6 +87,7 @@ export default function CheckoutForm({
     const finalAddress = deliveryAddress.trim() || "Not provided";
     const finalEmail = customerEmail.trim() || null;
 
+    submissionInFlightRef.current = true;
     setIsSubmitting(true);
     setMessage("Saving your order...");
 
@@ -145,6 +147,7 @@ Thank you for shopping with Eleos Decor ✨
     ]);
 
     if (error) {
+      submissionInFlightRef.current = false;
       setMessage(error.message);
       setIsSubmitting(false);
       return;
