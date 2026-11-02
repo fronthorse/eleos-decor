@@ -8,7 +8,7 @@ Production verification: the policy/grant snapshot still matched immediately bef
 application. Read-only role/JWT-claim checks passed for public catalog access, customer
 inquiry isolation, guest inquiry denial, trusted-admin inquiry reads and narrow table
 grants. Live browser GET checks loaded 24 shop cards and a product detail page.
-The owner's post-migration admin dashboard check remains pending. No product, order
+The owner confirmed Products and Orders load after migration. No product, order
 or customer business rows were modified; only the approved Auth admin role, policies,
 grants, inquiry status default and analytics function settings changed.
 
@@ -79,6 +79,11 @@ empty database. The test bootstrap is a separate, synthetic environment setup.
   Denied users cannot instantiate the privileged client. Real Auth calls are mocked
   in this script; it requires no secrets and does not replace HTTP integration checks.
 - Lint and production build passed. Eight existing lint warnings remain.
+- Final production dependency audit again reported zero vulnerabilities. The latest
+  checked Preview reached READY. Owner release approval is the remaining app gate.
+- Shared RESEND_API_KEY scope was reduced to Production only without reading or
+  replacing its value. Existing immutable deployments retain their original build
+  environments, but the PR's Preview routes block email delivery.
 - Production's post-migration advisor reports pg_trgm installed in public and leaked
   password protection disabled. These are follow-up warnings, not permissive access
   policies: https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public

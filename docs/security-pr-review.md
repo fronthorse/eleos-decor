@@ -5,8 +5,9 @@
 PR #1 remains open. The planned Preview shopping/auth/admin checks passed.
 Admin access hardening was tested on the isolated database, then the permission
 migration and approved admin enrollment were applied to production with explicit
-owner approval. Read-only production checks passed; final owner admin dashboard
-verification is pending. The app has not been merged/deployed. Do not merge/deploy yet.
+owner approval. Read-only production checks passed; the owner confirmed Products
+and Orders load afterward. The PR is ready for merge/release approval on the tested
+code revision. The app has not been merged/deployed; release approval remains required.
 The original Preview failed with `supabaseUrl is required` while prerendering /about.
 Supabase variables had been scoped to Production only.
 
@@ -36,8 +37,9 @@ new publishable/secret key values configured by the owner.
   projects use their direct storage hostname; local/custom hosts retain theirs.
 - Both email POST routes refuse delivery in Vercel Preview before reading email
   configuration or invoking Resend. The email readiness route reports disabled.
-  RESEND_API_KEY is still shared between Production and Preview in Vercel; remove
-  Preview from its scope as credential hygiene. No real emails were sent.
+  RESEND_API_KEY is now scoped to Production only in Vercel; its value was not read
+  or replaced. Existing immutable deployments retain their original environments,
+  but Preview email routes block delivery. No real emails were sent.
 - node scripts/verify-preview-isolation.mjs checks project-specific URL routing,
   local URL support, and both Preview email guards without credentials/providers.
 - Earlier local browser checks passed: product loading/detail, guest cart
@@ -69,8 +71,8 @@ new publishable/secret key values configured by the owner.
 1. Set test Auth redirect URLs and Site URL for the intended Preview origin before
    OAuth or email-link tests. Password login can be checked first. Never use real
    invitation/reset emails or production OAuth credentials for test flows.
-2. Remove Preview scope from the shared Resend key. Consider a separate Gemini
-   key before paid chatbot tests; Gemini remains shared and was not exercised.
+2. Consider a separate Gemini key before paid chatbot tests; Gemini remains shared
+   and was not exercised. Resend Preview scope cleanup is complete.
 3. Review docs/admin-access-rollout.md and the harden_admin_access migration.
    The migration was applied only to test; role-simulation SQL regression checks
    passed, including spoofed metadata and inquiry ownership/status denial. Server
@@ -85,8 +87,15 @@ new publishable/secret key values configured by the owner.
    and deletion. Read-only inspection confirmed the temporary product is gone.
    SQL storage-delete protection was kept intact. A policy/grant snapshot is saved
    in docs/production-access-policy-snapshot.json. No production deployment or
-   merge has occurred. The owner's final production admin read-only check is pending.
+   merge has occurred. The owner passed the final production admin read-only check.
 4. Review the announced November 3 advisories and patch instructions when published.
+
+Final audit rerun: zero production dependency vulnerabilities. The checked latest
+Preview (3a552ca) was READY; subsequent commits only update documentation. No new
+dependency or application changes were introduced after the passing checks.
+Remaining non-blocking findings: 16 moderate development-only audit findings,
+eight existing lint warnings, and Supabase advisor warnings for pg_trgm in public
+and leaked-password protection disabled. See admin-access-rollout.md for links.
 
 ## Sources
 
