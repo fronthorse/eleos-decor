@@ -29,4 +29,3 @@ using (bucket_id = 'products' and (select public.is_test_admin()));
 
 commit;
 select 'Four admin-only image policies created.' as result;
-

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { getSupabaseImagePatterns, getResumableUploadEndpoint } from "../lib/supabase/urls.mjs";
+import { getProductCardImageSrc, getProductDetailImageSrc, getProductPreviewImageSrc } from "../lib/productImages.js";
 
 for (const project of ["qexvohhfowswnryqugvr", "ztpvxikmatppyhoooyam"]) {
   const origin = `https://${project}.supabase.co`;
@@ -13,6 +14,20 @@ for (const project of ["qexvohhfowswnryqugvr", "ztpvxikmatppyhoooyam"]) {
 assert.deepEqual(getSupabaseImagePatterns(undefined), []);
 assert.equal(getResumableUploadEndpoint("http://localhost:54321"),
   "http://localhost:54321/storage/v1/upload/resumable");
+
+const previousTransforms = process.env.NEXT_PUBLIC_SUPABASE_IMAGE_TRANSFORMS;
+const originalImage = "https://ztpvxikmatppyhoooyam.supabase.co/storage/v1/object/public/products/test.webp";
+try {
+  process.env.NEXT_PUBLIC_SUPABASE_IMAGE_TRANSFORMS = "false";
+  assert.equal(getProductCardImageSrc(originalImage), originalImage);
+  assert.equal(getProductDetailImageSrc(originalImage), originalImage);
+  assert.equal(getProductPreviewImageSrc({ image_url: originalImage }), originalImage);
+  process.env.NEXT_PUBLIC_SUPABASE_IMAGE_TRANSFORMS = "true";
+  assert.match(getProductCardImageSrc(originalImage), /\/render\/image\/public\//);
+} finally {
+  if (previousTransforms === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_IMAGE_TRANSFORMS;
+  else process.env.NEXT_PUBLIC_SUPABASE_IMAGE_TRANSFORMS = previousTransforms;
+}
 
 // Exercise both route guards without importing any email provider or credentials.
 const previousEnvironment = process.env.VERCEL_ENV;
