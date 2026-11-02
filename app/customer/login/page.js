@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
-import { isAdminEmail } from "../../../lib/adminAuth";
+import { isAdminUser } from "../../../lib/adminAuth";
 
 export default function CustomerLoginPage() {
   const router = useRouter();
@@ -33,7 +33,7 @@ export default function CustomerLoginPage() {
     return;
   }
 
-  if (isAdminEmail(data.user?.email)) {
+  if (isAdminUser(data.user)) {
     setMessage("Admin account detected. Redirecting to admin portal...");
     router.push("/admin");
     router.refresh();

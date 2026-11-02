@@ -2,8 +2,9 @@
 
 ## Current status
 
-PR #1 remains open. The planned Preview shopping/auth/admin checks passed;
-production RLS findings below remain unresolved. Do not merge or deploy yet.
+PR #1 remains open. The planned Preview shopping/auth/admin checks passed.
+Admin access hardening is now implemented and tested on the isolated database;
+production rollout is pending approval and admin enrollment. Do not merge/deploy yet.
 The original Preview failed with `supabaseUrl is required` while prerendering /about.
 Supabase variables had been scoped to Production only.
 
@@ -68,12 +69,16 @@ new publishable/secret key values configured by the owner.
    invitation/reset emails or production OAuth credentials for test flows.
 2. Remove Preview scope from the shared Resend key. Consider a separate Gemini
    key before paid chatbot tests; Gemini remains shared and was not exercised.
-3. Address the existing production RLS weakness before calling the security work
-   complete: metadata inspection found unconditional authenticated product/variant
-   write policies and inquiry read/update policies. The test policies use admin
-   claims instead; production policies were inspected only and remain unchanged.
-   Production remediation needs an explicit migration and app/admin authorization
-   alignment, with testing. This PR has not been merged or deployed to production.
+3. Review docs/admin-access-rollout.md and the harden_admin_access migration.
+   The migration was applied only to test; role-simulation SQL regression checks
+   passed, including spoofed metadata and inquiry ownership/status denial. Server
+   authorization tests passed with trusted-role AND email-allowlist checks before
+   privileged-client creation. Production still has the legacy permissive policies.
+   Owner-specified production admin was verified active/confirmed, but has not been
+   enrolled. Production enrollment/migration needs approval before application.
+   Storage API deletion and browser regression after the authorization change remain
+   pending. SQL storage-delete protection was kept intact. No production deployment
+   or merge has occurred.
 4. Review the announced November 3 advisories and patch instructions when published.
 
 ## Sources

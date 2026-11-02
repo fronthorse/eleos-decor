@@ -7,7 +7,7 @@ import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
 import { createClient } from "../../lib/supabase/client";
 import { getSessionSafely } from "../../lib/supabase/auth";
-import { isAdminEmail } from "../../lib/adminAuth";
+import { isAdminUser } from "../../lib/adminAuth";
 import { shopNavigation } from "../../lib/navigationData";
 import {
   getProductPreviewImageSrc,
@@ -50,7 +50,7 @@ export default function Navbar() {
     FEATURED_PRODUCT_FALLBACK,
   ]);
   const [featuredProductIndex, setFeaturedProductIndex] = useState(0);
-  const isAdmin = isAdminEmail(user?.email);
+  const isAdmin = isAdminUser(user);
   const featuredProduct =
     featuredProducts[featuredProductIndex] || FEATURED_PRODUCT_FALLBACK;
   const featuredProductImage = getProductPreviewImageSrc(featuredProduct);

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
 import { getResumableUploadEndpoint } from "../../lib/supabase/urls.mjs";
-import { isAdminEmail } from "../../lib/adminAuth";
+import { isAdminUser } from "../../lib/adminAuth";
 import { withTimeout } from "../../lib/supabase/auth";
 import { verifyAdminSession as runVerifyAdminSession } from "../../lib/adminSession";
 import {
@@ -1025,7 +1025,7 @@ export default function AdminPage() {
       );
     }
 
-    if (!user || !isAdminEmail(user.email)) {
+    if (!user || !isAdminUser(user)) {
       throw createUploadError("Only a logged-in admin can upload images.");
     }
 

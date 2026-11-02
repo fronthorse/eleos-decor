@@ -35,20 +35,14 @@ begin
   end if;
 end $$;
 
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_policies
-    where schemaname = 'public'
-      and tablename = 'product_variants'
-      and policyname = 'Authenticated users can manage product variants'
-  ) then
-    create policy "Authenticated users can manage product variants"
-      on public.product_variants
-      for all
-      to authenticated
-      using (true)
-      with check (true);
-  end if;
-end $$;
+-- Do not restore the legacy policy that let every signed-in user edit variants.
+drop policy if exists "Authenticated users can manage product variants"
+  on public.product_variants;
+drop policy if exists "Admins can manage product variants"
+  on public.product_variants;
+create policy "Admins can manage product variants"
+  on public.product_variants for all to authenticated
+  using ((select auth.uid()) is not null and
+    coalesce((select auth.jwt())->'app_metadata'->>'role' = 'admin', false))
+  with check ((select auth.uid()) is not null and
+    coalesce((select auth.jwt())->'app_metadata'->>'role' = 'admin', false));
