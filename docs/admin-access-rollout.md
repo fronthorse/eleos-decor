@@ -1,7 +1,16 @@
 # Admin access rollout
 
-Status: prepared and tested on eleos-decor-test only. Production has not changed.
-Do not merge/deploy production or apply production SQL without the owner's approval.
+Status: tested on eleos-decor-test, then applied to production on November 2 with
+explicit owner approval. The approved existing admin was enrolled and the owner
+confirmed logout/login/refresh before migration. No app merge or deployment is authorized.
+
+Production verification: the policy/grant snapshot still matched immediately before
+application. Read-only role/JWT-claim checks passed for public catalog access, customer
+inquiry isolation, guest inquiry denial, trusted-admin inquiry reads and narrow table
+grants. Live browser GET checks loaded 24 shop cards and a product detail page.
+The owner's post-migration admin dashboard check remains pending. No product, order
+or customer business rows were modified; only the approved Auth admin role, policies,
+grants, inquiry status default and analytics function settings changed.
 
 ## What changes
 
@@ -14,7 +23,7 @@ customer inquiries. Product image writes require the trusted admin role; restric
 storage policies prevent a broader permissive policy from reopening that bucket.
 Other buckets' policies and the catalog's public image delivery are preserved.
 
-The API verifies the bearer token using Auth getUser, then requires BOTH the trusted
+The PR's API code verifies the bearer token using Auth getUser, then requires BOTH the trusted
 app_metadata admin role and the deployment's NEXT_PUBLIC_ADMIN_EMAILS allowlist
 before creating the privileged service client. Browser admin routing uses the same
 predicate; browser state is not the security boundary. Never assign admin status
@@ -31,8 +40,8 @@ through editable user_metadata or a public profile field.
 3. With separate approval, enroll only that confirmed production Auth user by setting
    app_metadata.role to admin through the trusted Auth Admin API or reviewed SQL.
    Preserve other app_metadata keys. Do not change the user's top-level Postgres
-   role, password, email, user_metadata, or any customer account. Production currently
-   has zero confirmed users with app_metadata.role = admin. The migration refuses
+   role, password, email, user_metadata, or any customer account. At initial preflight,
+   production had zero confirmed users with app_metadata.role = admin. The migration refuses
    to proceed until at least one exists, to prevent an admin lockout.
 4. Log out/in to obtain a fresh admin JWT and verify its app_metadata role. JWT claims
    can remain stale until refresh. Removing a role does not revoke an issued token;
@@ -70,6 +79,9 @@ empty database. The test bootstrap is a separate, synthetic environment setup.
   Denied users cannot instantiate the privileged client. Real Auth calls are mocked
   in this script; it requires no secrets and does not replace HTTP integration checks.
 - Lint and production build passed. Eight existing lint warnings remain.
+- Production's post-migration advisor reports pg_trgm installed in public and leaked
+  password protection disabled. These are follow-up warnings, not permissive access
+  policies: https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public
 - Supabase's test-project security advisor has no database findings. It reports
   leaked-password protection disabled; consider enabling it independently:
   https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection

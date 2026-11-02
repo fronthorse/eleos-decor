@@ -3,8 +3,10 @@
 ## Current status
 
 PR #1 remains open. The planned Preview shopping/auth/admin checks passed.
-Admin access hardening is now implemented and tested on the isolated database;
-production rollout is pending approval and admin enrollment. Do not merge/deploy yet.
+Admin access hardening was tested on the isolated database, then the permission
+migration and approved admin enrollment were applied to production with explicit
+owner approval. Read-only production checks passed; final owner admin dashboard
+verification is pending. The app has not been merged/deployed. Do not merge/deploy yet.
 The original Preview failed with `supabaseUrl is required` while prerendering /about.
 Supabase variables had been scoped to Production only.
 
@@ -73,15 +75,17 @@ new publishable/secret key values configured by the owner.
    The migration was applied only to test; role-simulation SQL regression checks
    passed, including spoofed metadata and inquiry ownership/status denial. Server
    authorization tests passed with trusted-role AND email-allowlist checks before
-   privileged-client creation. Production still has the legacy permissive policies.
-   Owner-specified production admin was verified active/confirmed, but has not been
-   enrolled. Production enrollment/migration needs approval before application.
+   privileged-client creation. The owner approved production enrollment and migration;
+   the active confirmed admin was enrolled, refreshed their session successfully,
+   and the migration applied. Read-only production role checks passed for public
+   catalog, customer inquiry isolation, guest denial and admin inquiry reads.
+   Live browser GET checks loaded 24 shop cards and a product detail page.
    The owner passed browser regression after the authorization change: admin
    login/refresh/save, customer admin denial, and temporary product/image creation
    and deletion. Read-only inspection confirmed the temporary product is gone.
    SQL storage-delete protection was kept intact. A policy/grant snapshot is saved
    in docs/production-access-policy-snapshot.json. No production deployment or
-   merge has occurred. The tested database permission rollout awaits approval.
+   merge has occurred. The owner's final production admin read-only check is pending.
 4. Review the announced November 3 advisories and patch instructions when published.
 
 ## Sources
