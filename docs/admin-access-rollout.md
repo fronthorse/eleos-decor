@@ -25,7 +25,8 @@ through editable user_metadata or a public profile field.
 1. Confirm the intended existing production admin login with the owner. Verify the
    Auth user exists, has a confirmed email and is included in Production's existing
    NEXT_PUBLIC_ADMIN_EMAILS setting. Do not copy production secrets into Preview.
-2. Back up the current policy/grant definitions and review the migration diff.
+2. Review production-access-policy-snapshot.json (read-only policy/grant snapshot
+   captured November 2) and the migration diff; refresh the snapshot before rollout.
    Existing production data must not be copied into the test project.
 3. With separate approval, enroll only that confirmed production Auth user by setting
    app_metadata.role to admin through the trusted Auth Admin API or reviewed SQL.
@@ -60,8 +61,10 @@ empty database. The test bootstrap is a separate, synthetic environment setup.
 - User-editable metadata containing role=admin cannot grant privileges.
 - Storage metadata insert/update tests passed even with an intentionally broad
   permissive policy present in the test transaction. Supabase prohibits direct SQL
-  storage deletes; the protection was not disabled. Storage API deletion and actual
-  browser flows must be checked on Preview with the test accounts.
+  storage deletes; the protection was not disabled. After the authorization change,
+  the owner verified admin login/refresh/product save and customer admin denial,
+  then created and deleted a temporary product with an uploaded image through
+  Preview. The temporary product was confirmed absent from the database afterward.
 - scripts/verify-admin-access.mjs checks API denial of absent/invalid tokens,
   email-only admins, editable-metadata spoofing and non-allowlisted admin roles.
   Denied users cannot instantiate the privileged client. Real Auth calls are mocked

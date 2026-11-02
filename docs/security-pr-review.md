@@ -76,9 +76,12 @@ new publishable/secret key values configured by the owner.
    privileged-client creation. Production still has the legacy permissive policies.
    Owner-specified production admin was verified active/confirmed, but has not been
    enrolled. Production enrollment/migration needs approval before application.
-   Storage API deletion and browser regression after the authorization change remain
-   pending. SQL storage-delete protection was kept intact. No production deployment
-   or merge has occurred.
+   The owner passed browser regression after the authorization change: admin
+   login/refresh/save, customer admin denial, and temporary product/image creation
+   and deletion. Read-only inspection confirmed the temporary product is gone.
+   SQL storage-delete protection was kept intact. A policy/grant snapshot is saved
+   in docs/production-access-policy-snapshot.json. No production deployment or
+   merge has occurred. The tested database permission rollout awaits approval.
 4. Review the announced November 3 advisories and patch instructions when published.
 
 ## Sources
