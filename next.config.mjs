@@ -1,17 +1,10 @@
+import { getSupabaseImagePatterns } from "./lib/supabase/urls.mjs";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
     remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "qexvohhfowswnryqugvr.supabase.co",
-        pathname: "/storage/v1/object/public/**",
-      },
-      {
-        protocol: "https",
-        hostname: "qexvohhfowswnryqugvr.supabase.co",
-        pathname: "/storage/v1/render/image/public/**",
-      },
+      ...getSupabaseImagePatterns(process.env.NEXT_PUBLIC_SUPABASE_URL),
       {
         protocol: "https",
         hostname: "images.unsplash.com",

@@ -1,79 +1,78 @@
 # Security PR verification — 2026-11-02
 
-## Preview configuration blocker
+## Current status
 
-The Vercel build for commit d710646 fails while prerendering /about with
-`Error: supabaseUrl is required` from WishlistProvider. The project environment
-metadata confirms NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
-SUPABASE_SERVICE_ROLE_KEY, and NEXT_PUBLIC_ADMIN_EMAILS target Production only.
-NEXT_PUBLIC_SITE_URL also targets Production only.
+PR #1 remains open and not ready to merge until Preview integration checks finish.
+The original Preview failed with `supabaseUrl is required` while prerendering /about.
+Supabase variables had been scoped to Production only.
 
-Only the production Supabase project is connected. The owner confirmed no test
-environment is available. Do not copy its credentials into Preview or substitute
-placeholder credentials to make the deployment look healthy.
+An isolated Supabase project, eleos-decor-test, now exists. The owner ran the
+reviewed test-only SQL files in supabase/: eight tables with RLS, admin-only
+storage write policies, three clearly labeled synthetic products, and two print
+variants. Two confirmed test accounts exist; only admin-test@example.com has the
+trusted app_metadata.role = admin claim. No production customer data was copied.
 
-To unblock:
-1. Provision an isolated Supabase test project with the reviewed schema/RLS and
-   synthetic products, customer and admin accounts. Do not copy customer data.
-2. Configure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY for Preview
-   with that project's public configuration. Set SUPABASE_SERVICE_ROLE_KEY only
-   server-side, using the test project's key; configure NEXT_PUBLIC_ADMIN_EMAILS
-   for the test admin only. Set NEXT_PUBLIC_SITE_URL to the intended test origin.
-3. Configure test Auth redirect URLs for the Preview origin and /auth/callback.
-4. Preview currently inherits RESEND_API_KEY and contact email settings shared with
-   Production. Before transactional tests, isolate email delivery using a sandbox
-   or disable delivery; do not send to real recipients. Isolate other paid API
-   credentials as needed.
-5. Rebuild Preview and test customer login/logout, persisted cart/wishlist,
-   non-admin denial and admin access with the isolated accounts. Do not place real
-   orders or edit production data.
+Vercel metadata now shows separate Preview entries for NEXT_PUBLIC_SUPABASE_URL,
+NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY and
+NEXT_PUBLIC_ADMIN_EMAILS. Production entries remain separate and unchanged.
+Values were not printed. End-to-end checks must still confirm they match the test
+project and that the server key works. The existing variable names accept the
+new publishable/secret key values configured by the owner.
 
-## Security sources
+## Changes and checks
+
+- Next.js and eslint-config-next pinned to 16.4.4; React/React DOM remain 19.2.9.
+- Clean npm ci passed. Production audit: zero vulnerabilities. Full audit: 16
+  moderate development ESLint/minimatch findings; no high/critical findings.
+  Cross-major minimatch overrides and npm's tooling downgrades were not applied.
+- Lint passes with eight existing warnings. Local production build passes with
+  the existing ignored environment, generating all 27 pages.
+- Image allowlists and resumable upload endpoints now derive from the configured
+  Supabase URL. Preview uploads no longer hardcode production storage. Hosted
+  projects use their direct storage hostname; local/custom hosts retain theirs.
+- Both email POST routes refuse delivery in Vercel Preview before reading email
+  configuration or invoking Resend. The email readiness route reports disabled.
+  RESEND_API_KEY is still shared between Production and Preview in Vercel; remove
+  Preview from its scope as credential hygiene. No real emails were sent.
+- node scripts/verify-preview-isolation.mjs checks project-specific URL routing,
+  local URL support, and both Preview email guards without credentials/providers.
+- Earlier local browser checks passed: product loading/detail, guest cart
+  add/quantity/remove persistence, guest wishlist add/remove persistence, login
+  required-field validation, and unauthenticated admin UI/API denial.
+- Successful customer/admin login, logout, authenticated persistence, non-admin
+  denial and authorized admin image operations still need verification against
+  the isolated Preview using the owner's test credentials. No production-backed
+  authenticated browser testing was attempted.
+- SQL setup was validated in rolled-back transactions before owner execution.
+  Owner cart isolation, denial of customer product writes, admin product updates
+  and public catalog reads passed. All eight tables have RLS enabled; the test
+  project's security advisor reported no findings after table setup.
+
+## Remaining setup and release gates
+
+1. Complete the new Preview build and confirm only the three test products load.
+2. Set test Auth redirect URLs and Site URL for the intended Preview origin before
+   OAuth or email-link tests. Password login can be checked first. Never use real
+   invitation/reset emails or production OAuth credentials for test flows.
+3. Remove Preview scope from the shared Resend key. Consider a separate Gemini
+   key before paid chatbot tests; Gemini remains shared and was not exercised.
+4. Finish the authenticated checks above; test uploads must go to the isolated
+   products bucket. No real orders or production writes are authorized.
+5. Address the existing production RLS weakness before calling the security work
+   complete: metadata inspection found unconditional authenticated product/variant
+   write policies and inquiry read/update policies. The test policies use admin
+   claims instead; production policies were inspected only and remain unchanged.
+   Production remediation needs an explicit migration and app/admin authorization
+   alignment, with testing. This PR has not been merged or deployed to production.
+6. Review the announced November 3 advisories and patch instructions when published.
+
+## Sources
 
 - https://nextjs.org/blog/nextjs-security-update-october-14-2026
 - https://github.com/react/react/security/advisories/GHSA-xqc2-xf4c-x3h3
 - https://github.com/react/react/security/advisories/GHSA-h3gv-c5rc-p453
 - https://github.com/websockets/ws/security/advisories/GHSA-96hv-2xvq-fx4p
+- https://github.com/isaacs/minimatch/security/advisories/GHSA-g3hv-75wg-m249
 - https://github.com/vercel/next.js/releases/tag/v16.4.4
 - https://nextjs.org/blog/upcoming-nextjs-security-release-november-2026
-
-Next.js 16.4.1 addresses the October upstream issues; React's 19.2 patched
-line is 19.2.9. Next.js 16.4.4 was published November 2 and is the latest stable
-patch found during this review. The November 3 security release is still pending;
-review its advisories and upgrade instructions when published before release.
-
-The image remotePatterns currently name the production Supabase hostname. An
-isolated Preview also needs its own exact Supabase image hostname allowlisted;
-check product thumbnails and galleries when configuring the test project.
-
-## Verification results
-
-- Clean npm ci: passed (388 packages installed). Initial registry idle timeout and
-  interrupted extraction were resolved by a clean installation with longer timeout.
-- npm run lint: passed, zero errors and eight existing warnings.
-- npm run build: passed on Next.js 16.4.4 with the existing ignored .env.local,
-  all 27 pages generated. Initial sandbox font download failure was resolved by
-  allowing network access; no placeholder Supabase settings were substituted.
-- npm audit --omit=dev: zero vulnerabilities. Full audit: 16 moderate,
-  zero high/critical; all are development ESLint/minimatch dependency chains.
-  The minimatch advisory is GHSA-g3hv-75wg-m249, fixed in 11.0.1. npm's proposed
-  tooling downgrades and a cross-major minimatch override were not applied.
-- Local production browser: shop rendered 24 products and product 120 detail.
-- Guest cart: add, reload persistence, quantity change to 2, and removal after
-  reload passed. Guest wishlist: add, reload persistence and removal passed.
-- Customer login: empty required-field validation passed. Admin guest access
-  displayed 'Admin login required'; its login link worked. Empty unauthenticated
-  POSTs to both admin mutation endpoints returned 401 before database access.
-- Browser console: local /_vercel/insights/script.js returned 404; no other
-  application errors observed on the checked pages. The test browser blocked
-  non-read requests except the explicit unauthenticated local API denial probes.
-- Successful customer/admin login, logout, account cart/wishlist persistence and
-  authorized admin access remain BLOCKED: no isolated backend or test accounts.
-  Authenticated page effects can write saved carts/wishlists automatically, so
-  production-backed login was not attempted. No emails, orders, or production
-  data changes were performed.
-- Preview remains BLOCKED by missing isolated Supabase configuration. No Vercel
-  variables were changed and no production deployment or merge was performed.
-
-Decision: not ready to merge until isolated integration testing and a successful
-Preview build complete. Recheck the announced November 3 advisories before release.
+- https://supabase.com/docs/guides/storage/uploads/resumable-uploads
