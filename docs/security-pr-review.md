@@ -2,8 +2,8 @@
 
 ## Current status
 
-PR #1 remains open. Preview integration checks are progressing; production RLS
-findings below remain unresolved.
+PR #1 remains open. The planned Preview shopping/auth/admin checks passed;
+production RLS findings below remain unresolved. Do not merge or deploy yet.
 The original Preview failed with `supabaseUrl is required` while prerendering /about.
 Supabase variables had been scoped to Production only.
 
@@ -16,8 +16,8 @@ trusted app_metadata.role = admin claim. No production customer data was copied.
 Vercel metadata now shows separate Preview entries for NEXT_PUBLIC_SUPABASE_URL,
 NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY and
 NEXT_PUBLIC_ADMIN_EMAILS. Production entries remain separate and unchanged.
-Values were not printed. End-to-end checks must still confirm they match the test
-project and that the server key works. The existing variable names accept the
+Values were not printed. The test catalog loaded from the isolated project, and
+the owner's admin product edit persisted through the server API. The variable names accept the
 new publishable/secret key values configured by the owner.
 
 ## Changes and checks
@@ -51,7 +51,11 @@ new publishable/secret key values configured by the owner.
   explicitly override this per deployment. No paid feature was enabled.
 - The first isolated Preview (f840690) reached READY and browser inspection showed
   exactly the three synthetic products. Its email readiness route reported delivery
-  disabled. The image correction is awaiting a new Preview verification.
+  disabled. The image correction (9a57529) reached READY; browser inspection
+  confirmed the uploaded image loaded on both the shop card and product page.
+- The owner confirmed the corrected image display and verified that Print A and
+  Print B remain separate cart entries with their respective labels/prices after
+  refresh. No checkout was performed.
 - SQL setup was validated in rolled-back transactions before owner execution.
   Owner cart isolation, denial of customer product writes, admin product updates
   and public catalog reads passed. All eight tables have RLS enabled; the test
@@ -59,23 +63,18 @@ new publishable/secret key values configured by the owner.
 
 ## Remaining setup and release gates
 
-1. Complete the image correction's Preview build and verify the saved upload displays
-   on the product page and shop cards. Confirm admin display with the owner.
-2. Set test Auth redirect URLs and Site URL for the intended Preview origin before
+1. Set test Auth redirect URLs and Site URL for the intended Preview origin before
    OAuth or email-link tests. Password login can be checked first. Never use real
    invitation/reset emails or production OAuth credentials for test flows.
-3. Remove Preview scope from the shared Resend key. Consider a separate Gemini
+2. Remove Preview scope from the shared Resend key. Consider a separate Gemini
    key before paid chatbot tests; Gemini remains shared and was not exercised.
-4. Confirm variant selection and separate cart entries for Print A and Print B;
-   test uploads must go to the isolated products bucket. No real orders or
-   production writes are authorized.
-5. Address the existing production RLS weakness before calling the security work
+3. Address the existing production RLS weakness before calling the security work
    complete: metadata inspection found unconditional authenticated product/variant
    write policies and inquiry read/update policies. The test policies use admin
    claims instead; production policies were inspected only and remain unchanged.
    Production remediation needs an explicit migration and app/admin authorization
    alignment, with testing. This PR has not been merged or deployed to production.
-6. Review the announced November 3 advisories and patch instructions when published.
+4. Review the announced November 3 advisories and patch instructions when published.
 
 ## Sources
 
