@@ -5,7 +5,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { createClient } from "../../lib/supabase/client";
-import { isAdminEmail } from "../../lib/adminAuth";
+import { getResumableUploadEndpoint } from "../../lib/supabase/urls.mjs";
+import { isAdminUser } from "../../lib/adminAuth";
 import { withTimeout } from "../../lib/supabase/auth";
 import { verifyAdminSession as runVerifyAdminSession } from "../../lib/adminSession";
 import {
@@ -40,8 +41,6 @@ const IMAGE_COMPRESSION_TIMEOUT_MS = 45000;
 const ADMIN_DB_TIMEOUT_MS = 20000;
 const ADMIN_DASHBOARD_AUTH_SAFETY_MS = 12000;
 const PRODUCTS_STORAGE_BUCKET = "products";
-const SUPABASE_STORAGE_HOST = "https://qexvohhfowswnryqugvr.storage.supabase.co";
-const SUPABASE_TUS_ENDPOINT = `${SUPABASE_STORAGE_HOST}/storage/v1/upload/resumable`;
 const TUS_CHUNK_SIZE = 6 * 1024 * 1024;
 const ADMIN_STORAGE_KEYS = [
   "adminAuthError",
@@ -882,7 +881,7 @@ export default function AdminPage() {
   }) {
     return new Promise((resolve, reject) => {
       const upload = new tus.Upload(file, {
-        endpoint: SUPABASE_TUS_ENDPOINT,
+        endpoint: getResumableUploadEndpoint(process.env.NEXT_PUBLIC_SUPABASE_URL),
         chunkSize: TUS_CHUNK_SIZE,
         retryDelays: [0, 1000, 3000, 5000, 10000],
         uploadDataDuringCreation: true,
@@ -1026,7 +1025,7 @@ export default function AdminPage() {
       );
     }
 
-    if (!user || !isAdminEmail(user.email)) {
+    if (!user || !isAdminUser(user)) {
       throw createUploadError("Only a logged-in admin can upload images.");
     }
 

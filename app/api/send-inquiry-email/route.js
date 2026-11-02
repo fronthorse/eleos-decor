@@ -15,6 +15,12 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  if (process.env.VERCEL_ENV === "preview") {
+    return Response.json(
+      { success: false, error: "Email delivery is disabled in Preview." },
+      { status: 403 }
+    );
+  }
   try {
     const config = getResendEmailConfig();
 

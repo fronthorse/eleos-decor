@@ -7,7 +7,7 @@ import Footer from "../../components/Footer";
 import EmptyState from "../../components/EmptyState";
 import { createClient } from "../../../lib/supabase/client";
 import { getSessionSafely } from "../../../lib/supabase/auth";
-import { isAdminEmail } from "../../../lib/adminAuth";
+import { isAdminUser } from "../../../lib/adminAuth";
 import {
   formatOrderStatus,
   getOrderStatusDescription,
@@ -110,7 +110,7 @@ export default function CustomerDashboardPage() {
       return;
     }
 
-    if (isAdminEmail(session.user.email)) {
+    if (isAdminUser(session.user)) {
       router.push("/admin");
       return;
     }

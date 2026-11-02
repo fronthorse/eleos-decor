@@ -16,6 +16,9 @@ function testEmailTokenIsValid(request) {
 }
 
 export async function GET() {
+  if (process.env.VERCEL_ENV === "preview") {
+    return Response.json({ success: false, ready: false, message: "Email delivery is disabled in Preview." });
+  }
   const config = getResendEmailConfig();
 
   return Response.json({
@@ -30,6 +33,12 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  if (process.env.VERCEL_ENV === "preview") {
+    return Response.json(
+      { success: false, error: "Email delivery is disabled in Preview." },
+      { status: 403 }
+    );
+  }
   try {
     if (!testEmailTokenIsValid(request)) {
       return Response.json(

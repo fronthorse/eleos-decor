@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { isAdminEmail } from "../../../lib/adminAuth";
+import { isAdminUser } from "../../../lib/adminAuth";
 
 export const PRODUCTS_STORAGE_BUCKET = "products";
 const API_DB_TIMEOUT_MS = 15000;
@@ -75,7 +75,7 @@ export async function requireAdmin(request) {
     };
   }
 
-  if (!isAdminEmail(user.email)) {
+  if (!isAdminUser(user)) {
     return {
       errorResponse: jsonError("You are not authorized for admin changes.", 403),
     };

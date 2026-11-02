@@ -1,0 +1,794 @@
+{
+  "captured": "2026-11-02",
+  "project": "qexvohhfowswnryqugvr",
+  "grants": [
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "INSERT",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "SELECT",
+      "with_hierarchy": "YES"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "UPDATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "DELETE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRUNCATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "REFERENCES",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRIGGER",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "INSERT",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "SELECT",
+      "with_hierarchy": "YES"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "UPDATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "DELETE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRUNCATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "REFERENCES",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRIGGER",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "INSERT",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "SELECT",
+      "with_hierarchy": "YES"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "UPDATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "DELETE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRUNCATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "REFERENCES",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "product_variants",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRIGGER",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "INSERT",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "SELECT",
+      "with_hierarchy": "YES"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "UPDATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "DELETE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRUNCATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "REFERENCES",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRIGGER",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "INSERT",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "SELECT",
+      "with_hierarchy": "YES"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "UPDATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "DELETE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRUNCATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "REFERENCES",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRIGGER",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "INSERT",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "SELECT",
+      "with_hierarchy": "YES"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "UPDATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "DELETE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRUNCATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "REFERENCES",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "products",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRIGGER",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "INSERT",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "SELECT",
+      "with_hierarchy": "YES"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "UPDATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "DELETE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRUNCATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "REFERENCES",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "anon",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRIGGER",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "INSERT",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "SELECT",
+      "with_hierarchy": "YES"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "UPDATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "DELETE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRUNCATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "REFERENCES",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "authenticated",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRIGGER",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "INSERT",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "SELECT",
+      "with_hierarchy": "YES"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "UPDATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "DELETE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRUNCATE",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "REFERENCES",
+      "with_hierarchy": "NO"
+    },
+    {
+      "grantee": "service_role",
+      "grantor": "postgres",
+      "table_name": "checkout_inquiries",
+      "is_grantable": "NO",
+      "table_schema": "public",
+      "table_catalog": "postgres",
+      "privilege_type": "TRIGGER",
+      "with_hierarchy": "NO"
+    }
+  ],
+  "policies": [
+    {
+      "cmd": "SELECT",
+      "qual": "true",
+      "roles": [
+        "public"
+      ],
+      "tablename": "products",
+      "permissive": "PERMISSIVE",
+      "policyname": "Allow public read access to products",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "products",
+      "permissive": "PERMISSIVE",
+      "policyname": "Allow authenticated users to insert products",
+      "schemaname": "public",
+      "with_check": "true"
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "(bucket_id = 'products'::text)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "objects",
+      "permissive": "PERMISSIVE",
+      "policyname": "Allow public read access to product images",
+      "schemaname": "storage",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "objects",
+      "permissive": "PERMISSIVE",
+      "policyname": "Allow authenticated users to upload product images",
+      "schemaname": "storage",
+      "with_check": "(bucket_id = 'products'::text)"
+    },
+    {
+      "cmd": "DELETE",
+      "qual": "true",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "products",
+      "permissive": "PERMISSIVE",
+      "policyname": "Allow authenticated users to delete products",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "qual": "true",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "products",
+      "permissive": "PERMISSIVE",
+      "policyname": "Allow authenticated users to update products",
+      "schemaname": "public",
+      "with_check": "true"
+    },
+    {
+      "cmd": "DELETE",
+      "qual": "(bucket_id = 'products'::text)",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "objects",
+      "permissive": "PERMISSIVE",
+      "policyname": "Allow authenticated users to delete product images",
+      "schemaname": "storage",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "checkout_inquiries",
+      "permissive": "PERMISSIVE",
+      "policyname": "Authenticated users can create inquiries",
+      "schemaname": "public",
+      "with_check": "true"
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "true",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "checkout_inquiries",
+      "permissive": "PERMISSIVE",
+      "policyname": "Admins can read inquiries",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "qual": "true",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "checkout_inquiries",
+      "permissive": "PERMISSIVE",
+      "policyname": "Admins can update inquiries",
+      "schemaname": "public",
+      "with_check": "true"
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "tablename": "checkout_inquiries",
+      "permissive": "PERMISSIVE",
+      "policyname": "Anyone can create checkout inquiries",
+      "schemaname": "public",
+      "with_check": "true"
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "true",
+      "roles": [
+        "public"
+      ],
+      "tablename": "product_variants",
+      "permissive": "PERMISSIVE",
+      "policyname": "Public can read product variants",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "ALL",
+      "qual": "true",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "product_variants",
+      "permissive": "PERMISSIVE",
+      "policyname": "Authenticated users can manage product variants",
+      "schemaname": "public",
+      "with_check": "true"
+    }
+  ]
+}
